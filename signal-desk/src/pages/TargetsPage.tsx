@@ -41,7 +41,7 @@ function TargetFormModal({
     const e: Record<string, string> = {}
     if (!name.trim()) e.name = '竞品名称不能为空'
     if (!url.trim()) e.url = 'URL 不能为空'
-    else if (!/^https:\/\//.test(url)) e.url = 'URL 需以 https:// 开头'
+    else if (!/^https:\/\//.test(url) && !/^test:\/\//.test(url)) e.url = 'URL 需以 https:// 或 test:// 开头'
     if (collectMode === 'scheduled' && !schedule) e.schedule = '请设置采集时间'
     setErrors(e)
     return Object.keys(e).length === 0
@@ -132,6 +132,7 @@ export default function TargetsPage() {
   const [userEmail, setUserEmail] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [editTarget, setEditTarget] = useState<Target | null>(null)
+  const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({})
   const [toast, setToast] = useState<ToastInfo | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -139,6 +140,30 @@ export default function TargetsPage() {
   const refresh = async () => {
     const res = await fetch('/api/targets', { credentials: 'include' })
     if (res.ok) setTargets(await res.json())
+  }
+
+  const handleAnalyze = async (t: Target) => {
+    setAnalyzing(p => ({ ...p, [t.id]: true }))
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ targetId: t.id }),
+      })
+      const data = await res.json()
+      if (data.intelIds?.length > 0) {
+        setToast({ msg: '分析完成，情报已生成，前往 Inbox 查看', type: 'success' })
+      } else if (data.ok) {
+        setToast({ msg: data.message || '无重大变化', type: 'success' })
+      } else {
+        setToast({ msg: data.error || '分析失败', type: 'error' })
+      }
+    } catch {
+      setToast({ msg: '分析失败，请稍后重试', type: 'error' })
+    } finally {
+      setAnalyzing(p => ({ ...p, [t.id]: false }))
+    }
   }
 
   useEffect(() => {
@@ -196,8 +221,8 @@ export default function TargetsPage() {
                     <td><span className="tag">{t.monitorStatus}</span></td>
                     <td>
                       <div className="td-actions">
-                        <button className="btn btn-secondary btn-sm" disabled title="T7 后可用">
-                          立即检测
+                        <button className="btn btn-secondary btn-sm" onClick={() => handleAnalyze(t)} disabled={analyzing[t.id]}>
+                          {analyzing[t.id] ? '分析中…' : '立即检测'}
                         </button>
                         <button className="btn btn-ghost btn-sm" onClick={() => setEditTarget(t)}>编辑</button>
                         <button className="btn-danger-ghost btn-sm" onClick={() => setDeleteConfirm(t.id)}>删除</button>

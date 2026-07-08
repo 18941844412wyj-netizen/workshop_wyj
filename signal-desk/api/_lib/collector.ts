@@ -1,3 +1,10 @@
+import { readFileSync, existsSync } from 'fs'
+import { join, dirname } from 'path'
+import { fileURLToPath } from 'url'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const CESHI_ROOT = join(__dirname, '../../../ceshi')
+
 /** 从 HTML 提取可见文本（剥离 style/script/注释，空白归一化） */
 export function extractText(html: string): string {
   let s = html
@@ -29,7 +36,17 @@ export interface CollectResult {
 
 const USER_AGENT = 'SignalDesk/1.0 (Competitor Intel Monitor)'
 
+function readTestPackHtml(url: string): string | null {
+  if (!url.startsWith('test://')) return null
+  const rel = url.slice('test://'.length).replace(/^\//, '')
+  const filePath = join(CESHI_ROOT, rel)
+  if (!existsSync(filePath)) throw new Error(`测试包文件不存在: ${rel}`)
+  return readFileSync(filePath, 'utf-8')
+}
+
 async function fetchHtml(url: string, jsFallback = false): Promise<string> {
+  const local = readTestPackHtml(url)
+  if (local) return local
   const fetchUrl = jsFallback
     ? url + (url.includes('?') ? '&' : '?') + '_render=1'
     : url

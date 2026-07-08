@@ -24,7 +24,7 @@ function validateTargetBody(body: {
 }) {
   if (!body.name?.trim()) return '竞品名称不能为空'
   if (!body.url?.trim()) return 'URL 不能为空'
-  if (!/^https:\/\//.test(body.url.trim())) return 'URL 需以 https:// 开头'
+  if (!/^https:\/\//.test(body.url.trim()) && !body.url.trim().startsWith('test://')) return 'URL 需以 https:// 或 test:// 开头'
   if (!['生图', '生视频', 'Agent'].includes(body.track ?? '')) return '无效赛道'
   if (!['manual', 'scheduled'].includes(body.collectMode ?? '')) return '无效采集方式'
   return null

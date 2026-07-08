@@ -5,9 +5,10 @@ import { logout } from '../lib/constants'
 interface LayoutProps {
   children: React.ReactNode
   userEmail?: string
+  compact?: boolean
 }
 
-export function Layout({ children, userEmail }: LayoutProps) {
+export function Layout({ children, userEmail, compact }: LayoutProps) {
   const navigate = useNavigate()
   return (
     <div className="app-shell">
@@ -40,7 +41,7 @@ export function Layout({ children, userEmail }: LayoutProps) {
           </button>
         </div>
       </aside>
-      <main className="main-content">{children}</main>
+      <main className={'main-content' + (compact ? ' main-content--flush' : '')}>{children}</main>
     </div>
   )
 }

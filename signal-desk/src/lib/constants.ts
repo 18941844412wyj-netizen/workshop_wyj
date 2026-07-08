@@ -1,6 +1,7 @@
 export type BuiltinRole = '产品经理' | '市场营销负责人' | '创业者·创始人' | '投资人'
 export type Role = BuiltinRole | string
 export type Track = '生图' | '生视频' | 'Agent'
+export type Priority = '紧急' | '中等' | '低'
 export type CollectMode = 'manual' | 'scheduled'
 
 export interface Target {

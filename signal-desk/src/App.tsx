@@ -3,6 +3,7 @@ import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import OnboardingPage from './pages/OnboardingPage'
 import TargetsPage from './pages/TargetsPage'
+import InboxPage from './pages/InboxPage'
 import { RequireAuth, OnboardingGuard } from './components/AuthGuard'
 
 function PlaceholderPage({ title }: { title: string }) {
@@ -21,7 +22,7 @@ export default function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/onboarding" element={<OnboardingGuard><OnboardingPage /></OnboardingGuard>} />
         <Route path="/targets" element={<RequireAuth><TargetsPage /></RequireAuth>} />
-        <Route path="/inbox" element={<RequireAuth><PlaceholderPage title="情报 Inbox" /></RequireAuth>} />
+        <Route path="/inbox" element={<RequireAuth><InboxPage /></RequireAuth>} />
         <Route path="/settings" element={<RequireAuth><PlaceholderPage title="设置" /></RequireAuth>} />
         <Route path="/" element={<Navigate to="/inbox" replace />} />
         <Route path="*" element={<Navigate to="/login" replace />} />
