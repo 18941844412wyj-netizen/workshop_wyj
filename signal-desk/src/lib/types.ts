@@ -37,3 +37,25 @@ export const FEEDBACK_MODULES: FeedbackModule[] = [
 export function getIntelActionPlan(intel: Intel, role: Role): string {
   return intel.actionPlan[role] ?? intel.actionPlan['产品经理'] ?? ''
 }
+
+export interface ConvMsg {
+  id: string
+  role: 'user' | 'ai'
+  content: string
+  referenceIntelIds?: string[]
+  referenceLabel?: string
+  timestamp: string
+}
+
+export interface ChatSessionSummary {
+  id: string
+  title: string
+  ended: boolean
+  messageCount?: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ChatSessionDetail extends ChatSessionSummary {
+  messages: ConvMsg[]
+}

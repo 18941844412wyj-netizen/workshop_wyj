@@ -4,11 +4,13 @@ import { Layout, Toast } from '../components/Layout'
 import { RoleSwitcher, InboxFilterPanel } from '../components/inbox-ui'
 import InboxList from '../components/InboxList'
 import InspectorPanel from '../components/InspectorPanel'
+import DeepChatPanel from '../components/DeepChatPanel'
 import type { Intel, FeedbackTag, FeedbackModule } from '../lib/types'
 import { fetchProfile } from '../lib/constants'
 
 type ListView = 'morning' | 'pool' | 'all'
 type ArchiveFilter = 'hide' | 'all' | 'only'
+type InspectorTab = 'detail' | 'chat'
 
 export default function InboxPage() {
   const navigate = useNavigate()
@@ -24,6 +26,8 @@ export default function InboxPage() {
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('hide')
   const [showFilters, setShowFilters] = useState(false)
   const [toastMsg, setToastMsg] = useState('')
+  const [inspectorTab, setInspectorTab] = useState<InspectorTab>('detail')
+  const [chatIntelIds, setChatIntelIds] = useState<string[]>([])
 
   const selectedId = searchParams.get('id')
   const selectedIntel = selectedId ? intels.find(i => i.id === selectedId) : undefined
@@ -58,7 +62,20 @@ export default function InboxPage() {
     refresh().finally(() => setLoading(false))
   }, [refresh])
 
-  const selectIntel = (id: string) => setSearchParams({ id, view: 'detail' })
+  useEffect(() => {
+    if (selectedId) {
+      setChatIntelIds(prev => prev.includes(selectedId) ? prev : [selectedId, ...prev.filter(id => id !== selectedId)])
+    }
+  }, [selectedId])
+
+  const selectIntel = (id: string) => {
+    setSearchParams({ id, view: 'detail' })
+    setInspectorTab('detail')
+  }
+
+  const toggleChatIntel = (id: string) => {
+    setChatIntelIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
 
   const patchIntel = async (id: string, body: Record<string, unknown>) => {
     await fetch(`/api/insights/${id}`, {
@@ -140,7 +157,7 @@ export default function InboxPage() {
             <div className="inspector-empty">
               <div className="empty-state">
                 <p className="empty-state-title">选择一条情报</p>
-                <p className="empty-state-desc">点击左侧卡片查看详情与反馈</p>
+                <p className="empty-state-desc">点击左侧卡片查看详情、反馈或深度对话</p>
                 <button className="btn btn-primary btn-sm" onClick={() => navigate('/targets')}>前往监控</button>
               </div>
             </div>
@@ -148,18 +165,33 @@ export default function InboxPage() {
             <>
               <header className="inspector-header">
                 <div className="inspector-tabs">
-                  <button type="button" className="inspector-tab active">情报详情</button>
+                  <button type="button"
+                    className={'inspector-tab' + (inspectorTab === 'detail' ? ' active' : '')}
+                    onClick={() => setInspectorTab('detail')}>情报详情</button>
+                  <button type="button"
+                    className={'inspector-tab' + (inspectorTab === 'chat' ? ' active' : '')}
+                    onClick={() => setInspectorTab('chat')}>深度对话</button>
                 </div>
                 <button type="button" className="inspector-close" onClick={() => setSearchParams({})}>×</button>
               </header>
               <div className="inspector-body">
-                <InspectorPanel
-                  intel={selectedIntel}
-                  currentRole={currentRole}
-                  onStatus={(s: '已读' | '归档') => handleStatus(selectedIntel.id, s)}
-                  onTogglePool={handleTogglePool}
-                  onFeedback={handleFeedback}
-                />
+                {inspectorTab === 'detail' ? (
+                  <InspectorPanel
+                    intel={selectedIntel}
+                    currentRole={currentRole}
+                    onStatus={(s: '已读' | '归档') => handleStatus(selectedIntel.id, s)}
+                    onTogglePool={handleTogglePool}
+                    onFeedback={handleFeedback}
+                  />
+                ) : (
+                  <DeepChatPanel
+                    embedded
+                    selectedIntelIds={chatIntelIds.length ? chatIntelIds : [selectedIntel.id]}
+                    availableIntels={intels}
+                    onToggleIntel={toggleChatIntel}
+                    onOpenDetail={selectIntel}
+                  />
+                )}
               </div>
             </>
           )}

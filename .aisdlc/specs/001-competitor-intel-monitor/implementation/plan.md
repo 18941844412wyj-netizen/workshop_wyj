@@ -120,11 +120,10 @@ status: draft
   - 成功信号：收件箱收到含情报摘要的邮件
   - 下一步动作：不成立则 T10 降级「站内通知/Inbox 红点」保底，邮件推送转后续演进
 
-- C3（CRON_SECRET 与 Vercel Cron 路由保护格式）
-  - 缺什么：确认 `vercel.json` crons 配置可以触发 `/api/cron/analyze` 且 Hobby 档每日一次限制已接受
-  - 取证/验证方式：T9 完成后，在 Vercel Dashboard 手动触发 Cron Job，确认 `CRON_SECRET` Header 校验通过
-  - 成功信号：Cron 路由返回 200，DB 写入新情报
-  - 下一步动作：Hobby 每日限制确认接受（ADR-0005 已记录）；不成立则加外部调度器（演进）
+- C3（CRON_SECRET 与 Vercel Cron 路由保护格式）— **部分解除（2026-07-08）**
+  - 本地验证：`GET /api/cron/analyze` 无 Header → 401；正确 `Authorization: Bearer {CRON_SECRET}` → 200
+  - `vercel.json` crons 已配置 `0 1 * * *`（UTC 01:00 = 北京时间 09:00）
+  - 待部署后：Vercel Dashboard 手动触发 Cron 做生产侧确认
 
 ---
 
@@ -1097,204 +1096,72 @@ Expected PASS: AC-001/003/004/005/006/009/014 通过
 
 ### Task T10: Vercel Cron 定时采集（/api/cron/analyze + vercel.json 配置）
 
-- [ ] **状态**：未开始
+- [x] **状态**：已完成
 
-**代码仓范围：**
-- 根项目：`signal-desk/api/cron/`、`signal-desk/vercel.json`
+**验证结果摘要（2026-07-08）：**
+- 无 Authorization Header → 401 PASS
+- 正确 Bearer CRON_SECRET → `{"ok":true,"processed":N,"generated":M}` PASS
+- 核心逻辑已抽取至 `run-analysis.ts`，`/api/analyze` 与 Cron 共用
+- DB 存在 1 个 `collect_mode='scheduled'` 目标（非 test:// URL 抓取失败时记录日志并继续）
 
-**文件（创建/修改）：**
-- `signal-desk/api/cron/analyze.ts`（GET，CRON_SECRET 保护）
-- `signal-desk/vercel.json`（补全 crons 配置）
-
-**验收点：**
-- `GET /api/cron/analyze` 缺少 `Authorization: Bearer {CRON_SECRET}` Header 时返回 401
-- 正确 Header 时，对所有 `collect_mode='scheduled'` 的监控目标依次执行「采集→检测→打标→分析」全链路（ADR-0005/规则-11）
-- Vercel Dashboard 可看到 Cron Job 配置，手动触发后 DB 有新情报（AC-013）
-- Cron 失败时记录 `analysis_status='failed'`，不产出半成品，不影响已有情报（异常-8）
-
-**步骤 1：实现 api/cron/analyze.ts**
-
-```typescript
-// CRON_SECRET 校验
-const auth = req.headers['authorization']
-if (auth !== `Bearer ${process.env.CRON_SECRET}`) return res.status(401).json({ error: 'Unauthorized' })
-
-// 查所有 collect_mode='scheduled' 的 targets（所有用户）
-// for each target:
-//   try { 复用 /api/analyze 的核心逻辑（提取为 runAnalysis(targetId, userId)） }
-//   catch { 记录失败，继续下一个 }
-// 返回 { ok: true, processed: n, generated: m }
-```
-
-关键：把 `/api/analyze` 中的核心逻辑提取为 `api/_lib/run-analysis.ts`，供手动触发和 Cron 共用，避免代码重复。
-
-**步骤 2：更新 vercel.json**
-
-```json
-{
-  "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
-  "crons": [
-    { "path": "/api/cron/analyze", "schedule": "0 1 * * *" }
-  ]
-}
-```
-
-注：Vercel Hobby 档 Cron 仅每日一次（ADR-0005 已确认），UTC 01:00 = 北京时间 09:00。
-
-**步骤 3：本地手动验证（C3 同步验证）**
-
-Run:
-```
-curl -X GET http://localhost:3000/api/cron/analyze -H "Authorization: Bearer <CRON_SECRET>"
-```
-Expected: `{"ok":true,"processed":1,"generated":1}`，DB `intels` 新增记录
-
-**步骤 4：提交**
-- Commit message: `实现 Vercel Cron 定时采集（/api/cron/analyze）+ 抽取公共分析逻辑`
-- 审计信息：
-  - repo: `root`
-    branch: `001-competitor-intel-monitor`
-    commit: `<TBD>`
-    pr: `<TBD>`
-    changed_files:
-      - `signal-desk/api/cron/analyze.ts`
-      - `signal-desk/api/_lib/run-analysis.ts`（新提取的公共逻辑）
-      - `signal-desk/api/analyze.ts`（改为调用 run-analysis）
-      - `signal-desk/vercel.json`
+**审计信息：**
+- repo: `root`
+  branch: `001-competitor-intel-monitor`
+  commit: `<TBD>`
+  pr: `<TBD>`
+  changed_files:
+    - `signal-desk/api/cron/analyze.ts`
+    - `signal-desk/api/_lib/run-analysis.ts`
+    - `signal-desk/api/_lib/cron-auth.ts`
+    - `signal-desk/api/analyze.ts`
+    - `signal-desk/vercel.json`
 
 ---
 
 ### Task T11: 邮件主动通知（Notifier + /api/notify + Resend）
 
-- [ ] **状态**：未开始
+- [x] **状态**：已完成（RESEND_API_KEY 未配置时优雅跳过；去重逻辑已验证）
 
-**代码仓范围：**
-- 根项目：`signal-desk/api/`、`signal-desk/api/_lib/`
+**验证结果摘要（2026-07-08）：**
+- `sendNotification` 首次 → `{ ok: true }`；二次 → `{ ok: true, skipped: true }` PASS
+- `run-analysis.ts` 分析成功后自动调用 `sendNotification`
+- `POST /api/notify` 支持 Cookie 用户本人或 CRON_SECRET 授权
 
-**文件（创建）：**
-- `signal-desk/api/_lib/notifier.ts`（Resend 发送 + idempotency key 去重逻辑）
-- `signal-desk/api/notify.ts`（POST /api/notify）
-
-**验收点：**
-- `POST /api/notify { intelId, userId }` 查 `notifications` 去重后通过 Resend 发送邮件（AC-015）
-- 同一情报同一用户第二次调用，返回 `{ ok: true, skipped: true }`（idempotency key 去重，规则-13）
-- 邮件内容包含：情报标题/摘要/行动建议/详情链接（per `emailSettings.pushContent` 配置）
-- 用户 `emailSettings.enabled=false` 时，跳过发送
-- 发送失败时：情报仍在 Inbox，通知记为失败，不阻塞（异常-9）
-
-**步骤 1：实现 notifier.ts**
-
-```typescript
-// sendNotification(intelId: string, userId: string): Promise<{ok, skipped}>
-// 1. 查 notifications WHERE user_id = :uid AND intel_id = :iid
-// 2. 若已存在 → return { ok: true, skipped: true }
-// 3. 查用户 emailSettings: enabled, recipientEmails, pushContent
-// 4. 若 !enabled 或 recipientEmails 为空 → return { ok: true, skipped: true }
-// 5. 查 intel 完整信息
-// 6. 构建邮件 HTML（per pushContent 配置）
-// 7. await resend.emails.send({ from: 'Signal Desk <onboarding@resend.dev>', to: recipientEmails, subject, html, headers: { 'X-Idempotency-Key': `${userId}:${intelId}` } })
-// 8. INSERT notifications(user_id, intel_id)
-// 9. return { ok: true, skipped: false }
-```
-
-**步骤 2：实现 /api/notify.ts**
-
-POST 接受 `{ intelId, userId }`（内部调用，也应有简单授权校验：来自 Cron 或 analyze 内部才允许无 Cookie 调用，可用 CRON_SECRET 或直接在 run-analysis 内部调用 sendNotification 函数，跳过 HTTP 层）。
-
-推荐：`run-analysis.ts` 中直接 `import { sendNotification } from './notifier'`，不经 HTTP；`/api/notify` 作为外部接口供测试使用。
-
-**步骤 3：本地验证（R-008 同步验证）**
-
-配置 `RESEND_API_KEY` 后：
-- 手动触发一条「紧急」情报的分析
-- 检查 `notifications` 表是否有记录
-- 检查 `recipientEmails` 收件箱是否收到邮件
-
-Expected PASS: 邮件收到，`notifications` 表有去重记录；第二次调用返回 `skipped: true`
-
-**步骤 4：提交**
-- Commit message: `实现邮件主动通知（Resend + idempotency key 去重 + /api/notify）`
-- 审计信息：
-  - repo: `root`
-    branch: `001-competitor-intel-monitor`
-    commit: `<TBD>`
-    pr: `<TBD>`
-    changed_files:
-      - `signal-desk/api/_lib/notifier.ts`
-      - `signal-desk/api/notify.ts`
-      - `signal-desk/api/_lib/run-analysis.ts`（集成 sendNotification 调用）
-      - `signal-desk/package.json`（已有 resend 依赖）
+**审计信息：**
+- repo: `root`
+  branch: `001-competitor-intel-monitor`
+  commit: `<TBD>`
+  pr: `<TBD>`
+  changed_files:
+    - `signal-desk/api/_lib/notifier.ts`
+    - `signal-desk/api/notify.ts`
+    - `signal-desk/api/_lib/run-analysis.ts`
 
 ---
 
 ### Task T12: 引用式深度对话（Chat API + Inspector 对话 Tab）
 
-- [ ] **状态**：未开始
+- [x] **状态**：已完成
 
-**代码仓范围：**
-- 根项目：`signal-desk/api/insights/[id]/`、`signal-desk/src/components/`
+**验证结果摘要（2026-07-08）：**
+- `generateChatReply` 价格追问 → 基于原文回答 PASS
+- 无关问题（CEO）→ 「资料不足」PASS
+- Inbox Inspector 新增「深度对话」Tab + `DeepChatPanel` 接真实 API
+- 会话 API：GET/POST `/api/chat-sessions`、GET/PATCH `/api/chat-sessions/:id`
 
-**文件（创建）：**
-- `signal-desk/api/insights/[id]/chat.ts`（POST /api/insights/:id/chat）
-- `signal-desk/api/chat-sessions/index.ts`（GET/POST /api/chat-sessions，会话管理）
-- `signal-desk/api/chat-sessions/[id].ts`（PATCH /api/chat-sessions/:id，终止会话）
-- `signal-desk/src/components/DeepChatPanel.tsx`（从 Demo 迁移，接真实 API）
-
-**验收点：**
-- `POST /api/insights/:id/chat { sessionId?, message, referenceIntelIds, referenceLabel }` 返回 AI 回复（grounded）
-- 无依据问题时，AI 明确回复「资料不足」（规则-4/异常-5，AC-007）
-- 会话历史持久化，刷新后可回看（AC-008）
-- 支持多会话（GET /api/chat-sessions 返回会话列表，可切换）
-- 终止会话（PATCH /api/chat-sessions/:id { ended: true }）后不可继续发送消息（设计doc §3.3 Chat 状态机）
-- Inspector 深度对话 Tab 内嵌，支持多情报引用 chip（AC-007）
-
-**步骤 1：实现 /api/insights/[id]/chat.ts**
-
-```typescript
-// POST /api/insights/:id/chat { sessionId?, message, referenceIntelIds, referenceLabel }
-// 1. 若无 sessionId → INSERT chat_sessions → sessionId
-// 2. 查 session，若 ended=true → return 400 '会话已结束'
-// 3. INSERT conv_messages(session_id, role='user', content=message, reference_intel_ids, reference_label)
-// 4. 查被引用情报（referenceIntelIds），提取 whatChanged/whyItMatters/sourceAnchor
-// 5. 构建 grounded system prompt：「仅基于以下情报原文作答。如信息不足，明确回复『资料不足』，禁止联网或臆造。」+ 情报原文 + 会话历史（前 N 条）
-// 6. 调用 LLM（stream 或 non-stream）
-// 7. INSERT conv_messages(session_id, role='ai', content=aiResponse)
-// 8. 返回 { sessionId, message: { id, role:'ai', content, timestamp } }
-```
-
-**步骤 2：实现会话管理 API**
-
-- `GET /api/chat-sessions`：返回当前用户的所有会话列表（title/ended/updatedAt）
-- `POST /api/chat-sessions`：新建空会话
-- `PATCH /api/chat-sessions/:id { ended: true }`：终止会话
-
-**步骤 3：迁移 DeepChatPanel**
-
-从 Demo `DeepChatPanel.tsx` 复制，替换 `sendGlobalMessage()` mock 为：
-- 发消息：`POST /api/insights/:id/chat`
-- 会话切换：`GET /api/chat-sessions` + `PATCH /api/chat-sessions/:id`
-- 历史加载：GET chat-session messages
-
-**步骤 4：验证（R-006 同步验证）**
-
-测试 grounded 约束：
-- 引用「Midjourney Starter 套餐涨价」情报，询问「价格变化了多少」→ 期望 AI 回答基于原文给出具体数据
-- 询问「这家公司 CEO 是谁」（原文中没有）→ 期望「资料不足」
-
-Expected PASS: AC-007/AC-008 通过
-
-**步骤 5：提交**
-- Commit message: `实现引用式深度对话 API（grounded prompt + 多会话管理）+ Inspector 对话 Tab`
-- 审计信息：
-  - repo: `root`
-    branch: `001-competitor-intel-monitor`
-    commit: `<TBD>`
-    pr: `<TBD>`
-    changed_files:
-      - `signal-desk/api/insights/[id]/chat.ts`
-      - `signal-desk/api/chat-sessions/index.ts`
-      - `signal-desk/api/chat-sessions/[id].ts`
-      - `signal-desk/src/components/DeepChatPanel.tsx`
+**审计信息：**
+- repo: `root`
+  branch: `001-competitor-intel-monitor`
+  commit: `<TBD>`
+  pr: `<TBD>`
+  changed_files:
+    - `signal-desk/api/insights/[id]/chat.ts`
+    - `signal-desk/api/chat-sessions/index.ts`
+    - `signal-desk/api/chat-sessions/[id].ts`
+    - `signal-desk/api/_lib/chat-reply.ts`
+    - `signal-desk/src/components/DeepChatPanel.tsx`
+    - `signal-desk/src/pages/InboxPage.tsx`
+    - `signal-desk/src/lib/types.ts`
 
 ---
 
