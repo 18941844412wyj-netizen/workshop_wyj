@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
-import { fetchProfile } from '../lib/constants'
+import { fetchProfileCached, getCachedProfile } from '../lib/profile-cache'
 
 type GuardState = 'loading' | 'guest' | 'needs-onboarding' | 'authed'
+
+function resolveGuardState(
+  profile: Awaited<ReturnType<typeof fetchProfileCached>>,
+  requireOnboarded: boolean,
+): GuardState {
+  if (!profile) return 'guest'
+  if (requireOnboarded && !profile.onboarded) return 'needs-onboarding'
+  return 'authed'
+}
 
 export function RequireAuth({
   children,
@@ -12,16 +21,27 @@ export function RequireAuth({
   requireOnboarded?: boolean
 }) {
   const location = useLocation()
-  const [state, setState] = useState<GuardState>('loading')
+  const cached = getCachedProfile()
+  const [state, setState] = useState<GuardState>(() => {
+    if (cached !== undefined) return resolveGuardState(cached, requireOnboarded)
+    return 'loading'
+  })
 
   useEffect(() => {
-    fetchProfile()
+    const cachedNow = getCachedProfile()
+    if (cachedNow !== undefined) {
+      setState(resolveGuardState(cachedNow, requireOnboarded))
+      return
+    }
+    let cancelled = false
+    fetchProfileCached()
       .then(p => {
-        if (!p) setState('guest')
-        else if (requireOnboarded && !p.onboarded) setState('needs-onboarding')
-        else setState('authed')
+        if (!cancelled) setState(resolveGuardState(p, requireOnboarded))
       })
-      .catch(() => setState('guest'))
+      .catch(() => {
+        if (!cancelled) setState('guest')
+      })
+    return () => { cancelled = true }
   }, [requireOnboarded, location.pathname])
 
   if (state === 'loading') {
@@ -33,16 +53,36 @@ export function RequireAuth({
 }
 
 export function OnboardingGuard({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<'loading' | 'guest' | 'onboarded' | 'pending'>('loading')
+  const cached = getCachedProfile()
+  const [state, setState] = useState<'loading' | 'guest' | 'onboarded' | 'pending'>(() => {
+    if (cached !== undefined) {
+      if (!cached) return 'guest'
+      if (cached.onboarded) return 'onboarded'
+      return 'pending'
+    }
+    return 'loading'
+  })
 
   useEffect(() => {
-    fetchProfile()
+    const cachedNow = getCachedProfile()
+    if (cachedNow !== undefined) {
+      if (!cachedNow) setState('guest')
+      else if (cachedNow.onboarded) setState('onboarded')
+      else setState('pending')
+      return
+    }
+    let cancelled = false
+    fetchProfileCached()
       .then(p => {
+        if (cancelled) return
         if (!p) setState('guest')
         else if (p.onboarded) setState('onboarded')
         else setState('pending')
       })
-      .catch(() => setState('guest'))
+      .catch(() => {
+        if (!cancelled) setState('guest')
+      })
+    return () => { cancelled = true }
   }, [])
 
   if (state === 'loading') {

@@ -41,7 +41,7 @@ async function handleRegister(req: VercelRequest, res: VercelResponse) {
   const user = users[0]
   await sql`
     INSERT INTO profiles (user_id, weights, email_settings, onboarded)
-    VALUES (${user.id}, ${JSON.stringify(DEFAULT_WEIGHTS)}, ${JSON.stringify(defaultEmailSettings())}, false)
+    VALUES (${user.id}, ${DEFAULT_WEIGHTS}, ${defaultEmailSettings()}, false)
   `
   const token = await signToken({ userId: user.id as string, email: user.email as string })
   setAuthCookie(res, token)

@@ -1,3 +1,6 @@
+-- Supabase 默认已启用 pgcrypto；其他 Postgres 需取消下行注释
+-- CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+
 -- users
 CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

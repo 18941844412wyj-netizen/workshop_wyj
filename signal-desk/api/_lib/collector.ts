@@ -1,6 +1,7 @@
 import { readFileSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { isHeadlessEnabled, renderPageHtml, shouldHeadlessFallback } from './headless-renderer'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CESHI_ROOT = join(__dirname, '../../../ceshi')
@@ -44,33 +45,36 @@ function readTestPackHtml(url: string): string | null {
   return readFileSync(filePath, 'utf-8')
 }
 
-async function fetchHtml(url: string, jsFallback = false): Promise<string> {
+async function fetchHtml(url: string): Promise<string> {
   const local = readTestPackHtml(url)
   if (local) return local
-  const fetchUrl = jsFallback
-    ? url + (url.includes('?') ? '&' : '?') + '_render=1'
-    : url
-  const res = await fetch(fetchUrl, {
+  const res = await fetch(url, {
     headers: { 'User-Agent': USER_AGENT, Accept: 'text/html' },
   })
   if (!res.ok) throw new Error(`抓取失败: ${res.status}`)
   return res.text()
 }
 
-/** 从 URL 或本地 file:// 路径抓取 HTML */
+/** 从 URL 或本地 test:// 路径抓取 HTML */
 export async function fetchPageHtml(url: string): Promise<{ html: string; jsFallbackUsed: boolean }> {
+  if (url.startsWith('test://')) {
+    const html = await fetchHtml(url)
+    return { html, jsFallbackUsed: false }
+  }
+
   let html = await fetchHtml(url)
   let text = extractText(html)
   let jsFallbackUsed = false
 
-  if (text.split('\n').filter(Boolean).length < 3) {
-    console.warn('[collector] markdown 不足 3 行，尝试 JS 注入降级')
+  const needsHeadless = isHeadlessEnabled() && shouldHeadlessFallback(text, html)
+  if (needsHeadless) {
+    console.warn('[collector] 检测到 SPA/空壳页面，启用 headless 渲染:', url)
     try {
-      html = await fetchHtml(url, true)
+      html = await renderPageHtml(url)
       text = extractText(html)
       jsFallbackUsed = true
-    } catch {
-      console.warn('[collector] JS 注入降级失败，使用原始 HTML')
+    } catch (err) {
+      console.warn('[collector] headless 渲染失败，使用静态 HTML:', err)
     }
   }
 

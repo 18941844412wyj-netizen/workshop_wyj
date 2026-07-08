@@ -1,5 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { SignJWT, jwtVerify } from 'jose'
+import { sql } from './db'
 
 const COOKIE_NAME = 'token'
 const MAX_AGE = 60 * 60 * 24 * 7 // 7 days
@@ -57,12 +58,21 @@ export async function verifyToken(req: VercelRequest): Promise<TokenPayload> {
   return { userId, email }
 }
 
+async function userExistsInDb(userId: string): Promise<boolean> {
+  const rows = await sql`SELECT id FROM users WHERE id = ${userId} LIMIT 1`
+  return rows.length > 0
+}
+
 type AuthHandler = (req: AuthenticatedRequest, res: VercelResponse) => Promise<void | VercelResponse>
 
 export function withAuth(handler: AuthHandler) {
   return async (req: VercelRequest, res: VercelResponse) => {
     try {
       const user = await verifyToken(req)
+      if (!(await userExistsInDb(user.userId))) {
+        clearAuthCookie(res)
+        return res.status(401).json({ error: '登录已失效，请重新登录' })
+      }
       const authed = req as AuthenticatedRequest
       authed.userId = user.userId
       authed.email = user.email
@@ -74,12 +84,16 @@ export function withAuth(handler: AuthHandler) {
 }
 
 export function readJsonBody<T extends Record<string, unknown>>(req: VercelRequest): T {
-  const body = req.body
-  if (body && typeof body === 'object' && !Buffer.isBuffer(body)) {
-    return body as T
-  }
-  if (typeof body === 'string' && body.trim()) {
-    return JSON.parse(body) as T
+  try {
+    const body = req.body
+    if (body && typeof body === 'object' && !Buffer.isBuffer(body)) {
+      return body as T
+    }
+    if (typeof body === 'string' && body.trim()) {
+      return JSON.parse(body) as T
+    }
+  } catch {
+    // vercel dev 在 body 已消费或格式异常时访问 req.body 可能抛错
   }
   return {} as T
 }

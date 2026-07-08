@@ -1,5 +1,10 @@
 {
   "rewrites": [{ "source": "/((?!api/).*)", "destination": "/index.html" }],
+  "functions": {
+    "api/**/*.ts": {
+      "maxDuration": 60
+    }
+  },
   "crons": [
     { "path": "/api/cron/analyze", "schedule": "0 1 * * *" }
   ]

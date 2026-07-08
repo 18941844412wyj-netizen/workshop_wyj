@@ -1,12 +1,14 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useLocation } from 'react-router-dom'
+import { setCachedProfile } from '../lib/profile-cache'
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const location = useLocation()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [banner, setBanner] = useState('')
+  const [banner, setBanner] = useState((location.state as { message?: string } | null)?.message ?? '')
   const [emailErr, setEmailErr] = useState('')
   const [pwdErr, setPwdErr] = useState('')
 
@@ -36,6 +38,7 @@ export default function LoginPage() {
         const profileRes = await fetch('/api/profile', { credentials: 'include' })
         if (profileRes.ok) {
           const profile = await profileRes.json()
+          setCachedProfile(profile)
           navigate(profile.onboarded ? '/inbox' : '/onboarding')
         } else {
           navigate('/onboarding')

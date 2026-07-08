@@ -4,6 +4,47 @@ import { ConfirmModal } from './Layout'
 
 const REF_OPTIONS = ['整条情报', '变化内容', '战略意义', '行动建议']
 
+function normalizeRole(role: unknown): 'user' | 'ai' {
+  const value = String(role ?? '').toLowerCase()
+  if (value === 'user') return 'user'
+  return 'ai'
+}
+
+function normalizeMessages(raw: unknown): ConvMsg[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map((m, idx) => {
+    const item = m as Partial<ConvMsg>
+    const referenceIntelIds = Array.isArray(item.referenceIntelIds)
+      ? item.referenceIntelIds
+      : []
+    return {
+      id: String(item.id ?? `msg-${idx}`),
+      role: normalizeRole(item.role),
+      content: String(item.content ?? ''),
+      referenceIntelIds,
+      referenceLabel: item.referenceLabel ?? '',
+      timestamp: item.timestamp ? String(item.timestamp) : new Date().toISOString(),
+    }
+  })
+}
+
+function buildUserMessage(text: string, referenceIntelIds: string[], referenceLabel: string): ConvMsg {
+  return {
+    id: `local-user-${Date.now()}`,
+    role: 'user',
+    content: text,
+    referenceIntelIds,
+    referenceLabel,
+    timestamp: new Date().toISOString(),
+  }
+}
+
+function formatMsgTime(timestamp: string): string {
+  const d = new Date(timestamp)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+}
+
 interface Props {
   selectedIntelIds: string[]
   availableIntels: Intel[]
@@ -43,9 +84,9 @@ export default function DeepChatPanel({
   const loadSession = useCallback(async (sessionId: string) => {
     const res = await fetch(`/api/chat-sessions/${sessionId}`, { credentials: 'include' })
     if (!res.ok) return
-    const data: ChatSessionDetail = await res.json()
-    setMessages(data.messages)
-    setEnded(data.ended)
+    const data = (await res.json()) as ChatSessionDetail
+    setMessages(normalizeMessages(data.messages))
+    setEnded(Boolean(data.ended))
     setActiveSessionId(sessionId)
   }, [])
 
@@ -53,7 +94,7 @@ export default function DeepChatPanel({
 
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
-  }, [messages.length, sending])
+  }, [messages, sending])
 
   const handleNewSession = async () => {
     const res = await fetch('/api/chat-sessions', {
@@ -72,6 +113,10 @@ export default function DeepChatPanel({
   const handleSend = async () => {
     if (!msgText.trim() || ended || selectedIntelIds.length === 0) return
     const primaryId = selectedIntelIds[0]
+    const text = msgText.trim()
+    const pendingUser = buildUserMessage(text, selectedIntelIds, refLabel)
+    setMsgText('')
+    setMessages(prev => [...prev, pendingUser])
     setSending(true)
     try {
       const res = await fetch(`/api/insights/${primaryId}/chat`, {
@@ -80,21 +125,53 @@ export default function DeepChatPanel({
         credentials: 'include',
         body: JSON.stringify({
           sessionId: activeSessionId ?? undefined,
-          message: msgText,
+          message: text,
           referenceIntelIds: selectedIntelIds,
           referenceLabel: refLabel,
         }),
       })
+      const data = await res.json().catch(() => ({} as {
+        error?: string
+        sessionId?: string
+        message?: { id?: string; content?: string; timestamp?: string }
+      }))
       if (!res.ok) {
-        const err = await res.json().catch(() => ({}))
-        alert((err as { error?: string }).error ?? '发送失败')
+        setMessages(prev => prev.filter(m => m.id !== pendingUser.id))
+        alert(data.error ?? '发送失败')
+        setMsgText(text)
         return
       }
-      const data = await res.json()
+      if (!data.sessionId) {
+        setMessages(prev => prev.filter(m => m.id !== pendingUser.id))
+        alert('发送失败：服务器未返回会话 ID')
+        setMsgText(text)
+        return
+      }
       if (!activeSessionId) setActiveSessionId(data.sessionId)
-      setMsgText('')
-      await loadSession(data.sessionId)
+      const sessionRes = await fetch(`/api/chat-sessions/${data.sessionId}`, { credentials: 'include' })
+      if (sessionRes.ok) {
+        const sessionData = (await sessionRes.json()) as ChatSessionDetail
+        setMessages(normalizeMessages(sessionData.messages))
+        setEnded(Boolean(sessionData.ended))
+      } else if (data.message?.content) {
+        setMessages(prev => [
+          ...prev.filter(m => m.id !== pendingUser.id),
+          pendingUser,
+          {
+            id: String(data.message?.id ?? `ai-${Date.now()}`),
+            role: 'ai',
+            content: String(data.message.content),
+            referenceIntelIds: [],
+            referenceLabel: '',
+            timestamp: data.message.timestamp ? String(data.message.timestamp) : new Date().toISOString(),
+          },
+        ])
+      }
       await loadSessions()
+    } catch {
+      setMessages(prev => prev.filter(m => m.id !== pendingUser.id))
+      setMsgText(text)
+      alert('发送失败，请稍后重试')
     } finally {
       setSending(false)
     }
@@ -102,19 +179,23 @@ export default function DeepChatPanel({
 
   const handleEndSession = async () => {
     if (!activeSessionId) return
-    await fetch(`/api/chat-sessions/${activeSessionId}`, {
+    const res = await fetch(`/api/chat-sessions/${activeSessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
       body: JSON.stringify({ ended: true }),
     })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({} as { error?: string }))
+      alert(err.error ?? '终止会话失败')
+      return
+    }
     setEnded(true)
     setConfirmEnd(false)
     await loadSessions()
   }
 
   const PanelTag = embedded ? 'div' : 'aside'
-  const session = sessions.find(s => s.id === activeSessionId)
 
   return (
     <PanelTag className="inbox-chat-panel">
@@ -209,14 +290,15 @@ export default function DeepChatPanel({
         )}
         {messages.map(m => (
           <div key={m.id} className={`chat-msg chat-msg-${m.role}`}>
-            {m.role === 'user' && m.referenceIntelIds && m.referenceIntelIds.length > 0 && (
+            {m.role === 'user' && (m.referenceIntelIds?.length ?? 0) > 0 && (
               <div className="chat-ref-chip">
-                引用 · {m.referenceIntelIds.length} 条 · {m.referenceLabel}
+                引用 · {m.referenceIntelIds?.length ?? 0} 条 · {m.referenceLabel}
               </div>
             )}
             <div className="chat-bubble">{m.content}</div>
             <div className={`chat-meta chat-meta-${m.role}`}>
-              {m.role === 'user' ? '你' : '分析助手'} · {new Date(m.timestamp).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+              {m.role === 'user' ? '你' : '分析助手'}
+              {formatMsgTime(m.timestamp) ? ` · ${formatMsgTime(m.timestamp)}` : ''}
             </div>
           </div>
         ))}
@@ -256,7 +338,7 @@ export default function DeepChatPanel({
         </div>
       )}
 
-      {confirmEnd && session && (
+      {confirmEnd && (
         <ConfirmModal
           title="终止对话"
           body="终止后不可继续追问，历史仍可回看。"

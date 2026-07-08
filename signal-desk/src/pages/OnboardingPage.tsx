@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getRoleDefaultWeights, type Role } from '../lib/constants'
+import { defaultEmailSettings, getRoleDefaultWeights, type Role } from '../lib/constants'
+import { setCachedProfile } from '../lib/profile-cache'
 import { RoleSelector } from '../components/RoleSelector'
 
 export default function OnboardingPage() {
@@ -24,8 +25,22 @@ export default function OnboardingPage() {
         body: JSON.stringify({ role, weights, onboarded: true }),
       })
       const data = await res.json()
-      if (res.ok && data.ok) navigate('/targets')
-      else setBanner(data.error || '保存失败，请稍后重试')
+      if (res.status === 401) {
+        const { invalidateProfileCache } = await import('../lib/profile-cache')
+        invalidateProfileCache()
+        navigate('/login', { state: { message: data.error || '登录已失效，请重新登录' } })
+        return
+      }
+      if (res.ok && data.ok) {
+        setCachedProfile({
+          role,
+          weights,
+          customRoles: [],
+          emailSettings: defaultEmailSettings(),
+          onboarded: true,
+        })
+        navigate('/targets')
+      } else setBanner(data.error || '保存失败，请稍后重试')
     } catch {
       setBanner('网络错误，请稍后重试')
     } finally {

@@ -3,6 +3,7 @@ import { collectSnapshot } from './collector'
 import { detectChanges } from './change-detector'
 import { analyzeChange, isLlmConfigured } from './ai-analyzer'
 import { sendNotification } from './notifier'
+import { parseJsonField } from './jsonb'
 import { calcMatchScore, getRoleDefaultWeights, type InfoLabel, type Priority } from './types'
 
 export interface RunAnalysisResult {
@@ -57,8 +58,10 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
   const profileRows = await sql`
     SELECT weights FROM profiles WHERE user_id = ${userId} LIMIT 1
   `
-  const weights =
-    (profileRows[0]?.weights as Record<InfoLabel, number>) ?? getRoleDefaultWeights('产品经理')
+  const weights = parseJsonField<Record<InfoLabel, number>>(
+    profileRows[0]?.weights,
+    getRoleDefaultWeights('产品经理'),
+  )
 
   const intelIds: string[] = []
 
@@ -81,10 +84,10 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
           analysis_status, is_noise
         ) VALUES (
           ${targetId}, ${userId}, ${prevRows[0].id}, ${curr.snapshotId},
-          ${JSON.stringify(analysis.labels)}, ${analysis.priority}, ${analysis.title},
+          ${analysis.labels}, ${analysis.priority}, ${analysis.title},
           ${analysis.whatChanged}, ${analysis.whyItMatters},
-          ${JSON.stringify(analysis.actionGeneral)}, ${JSON.stringify(analysis.actionPlan)},
-          ${JSON.stringify(analysis.sourceAnchor)}, ${matchScore},
+          ${analysis.actionGeneral}, ${analysis.actionPlan},
+          ${analysis.sourceAnchor}, ${matchScore},
           'success', false
         ) RETURNING id
       `
@@ -106,9 +109,9 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
           analysis_status, is_noise
         ) VALUES (
           ${targetId}, ${userId}, ${prevRows[0].id}, ${curr.snapshotId},
-          '[]', '低', '分析失败', ${candidate.after || candidate.before},
-          '自动分析未能完成', '{}', '{}',
-          ${JSON.stringify({ before: candidate.before, after: candidate.after })},
+          ${[]}, '低', '分析失败', ${candidate.after || candidate.before},
+          '自动分析未能完成', ${{}}, ${{}},
+          ${{ before: candidate.before, after: candidate.after }},
           'failed', false
         ) RETURNING id
       `

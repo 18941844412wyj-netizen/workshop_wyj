@@ -1,6 +1,7 @@
 import type { VercelResponse } from '@vercel/node'
 import { withAuth, readJsonBody, type AuthenticatedRequest } from '../_lib/auth'
 import { sql } from '../_lib/db'
+import { parseJsonField } from '../_lib/jsonb'
 import { getRoleDefaultWeights, type InfoLabel, type IntelStatus } from '../_lib/types'
 import { mapIntelRow } from '../_lib/insights-mapper'
 
@@ -10,7 +11,10 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     const profileRows = await sql`SELECT weights FROM profiles WHERE user_id = ${req.userId} LIMIT 1`
-    const weights = (profileRows[0]?.weights as Record<InfoLabel, number>) ?? getRoleDefaultWeights('产品经理')
+    const weights = parseJsonField<Record<InfoLabel, number>>(
+      profileRows[0]?.weights,
+      getRoleDefaultWeights('产品经理'),
+    )
 
     const rows = await sql`
       SELECT i.*, t.name AS target_name, t.track,

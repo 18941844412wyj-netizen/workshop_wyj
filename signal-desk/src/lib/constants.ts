@@ -84,9 +84,13 @@ export async function saveProfile(body: Partial<UserProfile> & { onboarded?: boo
   })
   const data = await res.json()
   if (!res.ok) return { ok: false, error: data.error || '保存失败' }
+  const { invalidateProfileCache } = await import('./profile-cache')
+  invalidateProfileCache()
   return { ok: true }
 }
 
 export async function logout(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+  const { invalidateProfileCache } = await import('./profile-cache')
+  invalidateProfileCache()
 }
