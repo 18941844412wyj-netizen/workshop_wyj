@@ -1,5 +1,5 @@
 import postgres, { type Sql } from 'postgres'
-import { loadEnvLocal } from './env'
+import { loadEnvLocal } from './env.js'
 
 loadEnvLocal()
 

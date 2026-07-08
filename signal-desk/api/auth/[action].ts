@@ -1,9 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import bcrypt from 'bcryptjs'
 import type { JSONValue } from 'postgres'
-import { sql } from '../_lib/db'
-import { readJsonBody, setAuthCookie, clearAuthCookie, signToken } from '../_lib/auth'
-import { DEFAULT_WEIGHTS, defaultEmailSettings } from '../_lib/types'
+import { sql } from '../_lib/db.js'
+import { readJsonBody, setAuthCookie, clearAuthCookie, signToken } from '../_lib/auth.js'
+import { DEFAULT_WEIGHTS, defaultEmailSettings } from '../_lib/types.js'
 
 async function handleLogin(req: VercelRequest, res: VercelResponse) {
   const { email, password } = readJsonBody<{ email?: string; password?: string }>(req)

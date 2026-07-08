@@ -1,6 +1,6 @@
-import type { InfoLabel, IntelStatus, Priority } from '../_lib/types'
-import { calcMatchScore } from '../_lib/types'
-import { parseJsonField } from '../_lib/jsonb'
+import type { InfoLabel, IntelStatus, Priority } from './types.js'
+import { calcMatchScore } from './types.js'
+import { parseJsonField } from './jsonb.js'
 
 const DEFAULT_ACTION = '结合该变化评估对业务的影响并更新应对预案。'
 

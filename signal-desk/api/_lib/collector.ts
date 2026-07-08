@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
 import type { Sql } from 'postgres'
-import { isHeadlessEnabled, renderPageHtml, shouldHeadlessFallback } from './headless-renderer'
+import { isHeadlessEnabled, renderPageHtml, shouldHeadlessFallback } from './headless-renderer.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CESHI_ROOT = join(__dirname, '../../../ceshi')

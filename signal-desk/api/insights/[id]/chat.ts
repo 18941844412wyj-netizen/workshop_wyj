@@ -1,7 +1,7 @@
 import type { VercelResponse } from '@vercel/node'
-import { withAuth, readJsonBody, type AuthenticatedRequest } from '../../_lib/auth'
-import { sql } from '../../_lib/db'
-import { generateChatReply, type IntelContext } from '../../_lib/chat-reply'
+import { withAuth, readJsonBody, type AuthenticatedRequest } from '../../_lib/auth.js'
+import { sql } from '../../_lib/db.js'
+import { generateChatReply, type IntelContext } from '../../_lib/chat-reply.js'
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method !== 'POST') {

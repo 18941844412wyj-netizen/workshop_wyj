@@ -1,8 +1,8 @@
 import type { VercelResponse } from '@vercel/node'
 import type { JSONValue } from 'postgres'
-import { withAuth, readJsonBody, type AuthenticatedRequest } from './_lib/auth'
-import { sql } from './_lib/db'
-import { parseJsonField } from './_lib/jsonb'
+import { withAuth, readJsonBody, type AuthenticatedRequest } from './_lib/auth.js'
+import { sql } from './_lib/db.js'
+import { parseJsonField } from './_lib/jsonb.js'
 import {
   BUILTIN_ROLES,
   INFO_LABELS,
@@ -12,7 +12,7 @@ import {
   type EmailSettings,
   type InfoLabel,
   type Role,
-} from './_lib/types'
+} from './_lib/types.js'
 
 function serializeProfile(p: Record<string, unknown>) {
   return {

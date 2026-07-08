@@ -1,10 +1,10 @@
-import { sql } from './db'
-import { collectSnapshot } from './collector'
-import { detectChanges } from './change-detector'
-import { analyzeChange, isLlmConfigured } from './ai-analyzer'
-import { sendNotification } from './notifier'
-import { parseJsonField } from './jsonb'
-import { calcMatchScore, getRoleDefaultWeights, type InfoLabel, type Priority } from './types'
+import { sql } from './db.js'
+import { collectSnapshot } from './collector.js'
+import { detectChanges } from './change-detector.js'
+import { analyzeChange, isLlmConfigured } from './ai-analyzer.js'
+import { sendNotification } from './notifier.js'
+import { parseJsonField } from './jsonb.js'
+import { calcMatchScore, getRoleDefaultWeights, type InfoLabel, type Priority } from './types.js'
 
 export interface RunAnalysisResult {
   ok: boolean

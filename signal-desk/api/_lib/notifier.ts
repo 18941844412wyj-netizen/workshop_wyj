@@ -1,6 +1,6 @@
 import { Resend } from 'resend'
-import { sql } from './db'
-import { defaultEmailSettings, type EmailSettings } from './types'
+import { sql } from './db.js'
+import { defaultEmailSettings, type EmailSettings } from './types.js'
 
 export function isResendConfigured(): boolean {
   const key = process.env.RESEND_API_KEY

@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { sql } from '../_lib/db'
-import { verifyCronSecret } from '../_lib/cron-auth'
-import { runAnalysis } from '../_lib/run-analysis'
+import { sql } from '../_lib/db.js'
+import { verifyCronSecret } from '../_lib/cron-auth.js'
+import { runAnalysis } from '../_lib/run-analysis.js'
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') {

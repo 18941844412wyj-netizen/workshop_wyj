@@ -1,8 +1,8 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
 import { zodResponseFormat } from 'openai/helpers/zod'
-import type { ChangeCandidate } from './change-detector'
-import { BUILTIN_ROLES, INFO_LABELS, PRIORITIES, type InfoLabel, type Priority } from './types'
+import type { ChangeCandidate } from './change-detector.js'
+import { BUILTIN_ROLES, INFO_LABELS, PRIORITIES, type InfoLabel, type Priority } from './types.js'
 
 export const IntelSchema = z.object({
   isNoise: z.boolean(),

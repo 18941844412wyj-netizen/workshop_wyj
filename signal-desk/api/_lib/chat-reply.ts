@@ -1,5 +1,5 @@
 import OpenAI from 'openai'
-import { isLlmConfigured } from './ai-analyzer'
+import { isLlmConfigured } from './ai-analyzer.js'
 
 export interface IntelContext {
   id: string

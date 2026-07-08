@@ -1,7 +1,7 @@
 import type { VercelResponse } from '@vercel/node'
-import { withAuth, readJsonBody, type AuthenticatedRequest } from '../_lib/auth'
-import { sql } from '../_lib/db'
-import type { CollectMode, Track } from '../_lib/types'
+import { withAuth, readJsonBody, type AuthenticatedRequest } from '../_lib/auth.js'
+import { sql } from '../_lib/db.js'
+import type { CollectMode, Track } from '../_lib/types.js'
 
 function mapTarget(row: Record<string, unknown>) {
   return {
