@@ -594,7 +594,7 @@ Run: `cd signal-desk ; vercel dev`（同时启动 Vite + Serverless Functions）
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `<TBD>`
+  commit: `74c1a79`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/api/profile.ts`
@@ -668,7 +668,7 @@ Expected PASS: 数据正确写入，页面跳转至 `/targets`
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `<TBD>`
+  commit: `74c1a79`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/api/targets/index.ts`
@@ -735,7 +735,7 @@ Expected PASS: 一条记录，字段正确
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `<TBD>`
+  commit: `74c1a79`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/api/_lib/collector.ts`
