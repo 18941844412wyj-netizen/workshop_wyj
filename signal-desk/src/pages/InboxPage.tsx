@@ -68,6 +68,12 @@ export default function InboxPage() {
     }
   }, [selectedId])
 
+  useEffect(() => {
+    const view = searchParams.get('view')
+    if (view === 'chat') setInspectorTab('chat')
+    else if (view === 'detail') setInspectorTab('detail')
+  }, [searchParams])
+
   const selectIntel = (id: string) => {
     setSearchParams({ id, view: 'detail' })
     setInspectorTab('detail')

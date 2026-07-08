@@ -1,7 +1,7 @@
 import type { VercelResponse } from '@vercel/node'
-import { withAuth, readJsonBody, type AuthenticatedRequest } from '../_lib/auth'
-import { sql } from '../_lib/db'
-import type { FeedbackModule, FeedbackTag } from '../_lib/types'
+import { withAuth, readJsonBody, type AuthenticatedRequest } from '../../_lib/auth'
+import { sql } from '../../_lib/db'
+import type { FeedbackModule, FeedbackTag } from '../../_lib/types'
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })

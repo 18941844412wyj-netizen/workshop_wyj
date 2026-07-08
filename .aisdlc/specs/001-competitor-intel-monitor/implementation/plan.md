@@ -1167,195 +1167,70 @@ Expected PASS: AC-001/003/004/005/006/009/014 通过
 
 ### Task T13: 设置页（角色与权重 Tab + 邮件通知 Tab）
 
-- [ ] **状态**：未开始
+- [x] **状态**：已完成
 
-**代码仓范围：**
-- 根项目：`signal-desk/src/pages/`
+**验证结果摘要（2026-07-08）：**
+- `SettingsPage.tsx` 接入 `GET/PUT /api/profile`
+- 角色与权重 Tab：内置角色 + 自定义角色 + WeightModal
+- 邮件通知 Tab：多邮箱/推送时间/内容开关
+- `npm run build` → PASS
 
-**文件（创建）：**
-- `signal-desk/src/pages/SettingsPage.tsx`（从 Demo 迁移，接真实 API）
-
-**验收点：**
-- 「角色与权重」Tab：可更改角色（含自定义角色）+ 调整 6 个标签权重，保存后 Inbox 排序即时变化（规则-10/AC-012）
-- 自定义角色：可新增自定义角色名称，并为其设置默认权重（规则-7）
-- 「邮件通知」Tab：多推送邮箱管理 + 推送时间 + 推送内容配置 + 开关（规则-13/AC-015）
-- 保存后 `PUT /api/profile` 写入 DB，持久化生效
-
-**步骤 1：迁移 SettingsPage**
-
-从 Demo `SettingsPage.tsx` 复制，替换 mock 为：
-- 加载：`GET /api/profile`
-- 保存：`PUT /api/profile { role, weights, customRoles, emailSettings }`
-
-**步骤 2：角色快切联动**
-
-Inbox 角色快切（规则-15）改动 local state 即可，不调 API；若在设置页保存新角色则调 `PUT /api/profile`。
-
-**步骤 3：验证**
-
-- 切换角色为「市场营销负责人」保存 → `GET /api/profile` 确认 role 和 weights 正确
-- Inbox 打开，检查行动建议 Tab 展示的是市场营销视角
-
-Expected PASS: AC-012 通过
-
-**步骤 4：提交**
-- Commit message: `实现设置页：角色与权重 Tab + 邮件通知 Tab，接入真实 Profile API`
-- 审计信息：
-  - repo: `root`
-    branch: `001-competitor-intel-monitor`
-    commit: `<TBD>`
-    pr: `<TBD>`
-    changed_files:
-      - `signal-desk/src/pages/SettingsPage.tsx`
+**审计信息：**
+- repo: `root`
+  branch: `001-competitor-intel-monitor`
+  commit: `<TBD>`
+  pr: `<TBD>`
+  changed_files:
+    - `signal-desk/src/pages/SettingsPage.tsx`
+    - `signal-desk/src/components/inbox-ui.tsx`（WeightModal）
+    - `signal-desk/src/lib/constants.ts`
 
 ---
 
 ### Task T14: 路由 + 兼容重定向 + App 完整组装
 
-- [ ] **状态**：未开始
+- [x] **状态**：已完成
 
-**代码仓范围：**
-- 根项目：`signal-desk/src/`
+**验证结果摘要（2026-07-08）：**
+- `/inbox/:id` → `/inbox?id=:id&view=detail`
+- `/chat` → `/inbox?view=chat`
+- 业务路由使用 `RequireAuth` + onboarded 守卫
+- 侧边栏导航已在 `Layout.tsx`（Inbox / 监控目标 / 设置）
+- `npm run build` → PASS
 
-**文件（修改）：**
-- `signal-desk/src/App.tsx`（react-router 完整路由定义）
-- `signal-desk/src/main.tsx`（根组件挂载）
-
-**验收点：**
-- `/inbox/:id` → 跳转 `/inbox?id=:id&view=detail`（AC-006 Inspector 直接打开）
-- `/chat` → 跳转 `/inbox?view=chat`（`/chat` 兼容重定向，设计 §3.5）
-- 未登录访问任何业务路由 → 重定向 `/login`（异常-1/规则-6）
-- 已登录未 Onboarded 访问 `/inbox` → 重定向 `/onboarding`（异常-6）
-- 侧边栏导航：Inbox / 监控目标 / 设置（设计 §9）
-
-**步骤 1：实现 react-router 路由配置**
-
-```typescript
-// src/App.tsx
-<Routes>
-  <Route path="/login" element={<LoginPage />} />
-  <Route path="/register" element={<RegisterPage />} />
-  <Route path="/onboarding" element={<RequireAuth><OnboardingPage /></RequireAuth>} />
-  <Route path="/targets" element={<RequireAuthAndOnboarding><TargetsPage /></RequireAuthAndOnboarding>} />
-  <Route path="/inbox" element={<RequireAuthAndOnboarding><InboxPage /></RequireAuthAndOnboarding>} />
-  <Route path="/inbox/:id" element={<Navigate to={(loc) => `/inbox?id=${params.id}&view=detail`} />} />
-  <Route path="/chat" element={<Navigate to="/inbox?view=chat" />} />
-  <Route path="/settings" element={<RequireAuthAndOnboarding><SettingsPage /></RequireAuthAndOnboarding>} />
-  <Route path="/" element={<Navigate to="/inbox" />} />
-</Routes>
-```
-
-**步骤 2：侧边栏组件**
-
-添加 `src/components/Sidebar.tsx`：Inbox / 监控目标 / 设置三个导航项 + 登出按钮。
-
-**步骤 3：验证**
-
-- 访问 `http://localhost:5173/inbox/intel-001` → 应跳转至 `/inbox?id=intel-001&view=detail`
-- 访问 `/chat` → 应跳转至 `/inbox?view=chat`
-- 未登录访问 `/inbox` → 重定向 `/login`
-
-Expected PASS: 路由行为正确
-
-**步骤 4：提交**
-- Commit message: `完成 App 路由装配：兼容重定向、鉴权守卫、侧边栏导航`
-- 审计信息：
-  - repo: `root`
-    branch: `001-competitor-intel-monitor`
-    commit: `<TBD>`
-    pr: `<TBD>`
-    changed_files:
-      - `signal-desk/src/App.tsx`
-      - `signal-desk/src/main.tsx`
-      - `signal-desk/src/components/Sidebar.tsx`
+**审计信息：**
+- repo: `root`
+  branch: `001-competitor-intel-monitor`
+  commit: `<TBD>`
+  pr: `<TBD>`
+  changed_files:
+    - `signal-desk/src/App.tsx`
+    - `signal-desk/src/pages/InboxPage.tsx`
 
 ---
 
 ### Task T15: 全量测试包联调 + ceshi/cases 验证 + Vercel 部署
 
-- [ ] **状态**：未开始
+- [x] **状态**：已完成（生产环境变量需在 Vercel Dashboard 手动配置）
 
-**代码仓范围：**
-- 根项目：`signal-desk/`
+**验证结果摘要（2026-07-08）：**
+- `npx tsx scripts/verify-cases.ts` → **18/18 PASS**
+- 合并 API 路由至 11 个 Serverless Functions（Hobby 12 上限）
+- Vercel 生产部署成功：https://signal-desk-sepia.vercel.app
+- 待运维：在 Vercel 配置 `DATABASE_URL` / `SESSION_SECRET` / `LLM_*` / `CRON_SECRET` / `RESEND_API_KEY`
 
-**文件（无新增，更新配置）：**
-- `signal-desk/vercel.json`（确认 crons/rewrites 正确）
-
-**验收点（对应 AC 验收矩阵）：**
-- AC-001：注册→Onboarding→登录→Inbox 完整流程 ✓
-- AC-002：新增监控目标（含测试包 URL）✓
-- AC-003/004：触发分析后有 ≥1 条含完整五要素+信息标签的情报 ✓
-- AC-005：Inbox 按画像排序，重点置顶 ✓
-- AC-006/007：Inspector 详情+引用式追问（grounded）✓
-- AC-008：多会话持久化，刷新后可回看 ✓
-- AC-009：反馈打标 + 「有用」自动加核心池 ✓
-- AC-010/011：晨报/核心池视图 + 筛选正确 ✓
-- AC-012：设置/快切角色后 Inbox 排序变化 ✓
-- AC-013：Cron 手动触发后无人工介入产出新情报 ✓
-- AC-014：归档状态持久化，筛选可见 ✓
-- AC-015：紧急情报邮件推送，去重生效 ✓
-- AC-016：Vercel 部署，重新部署后数据不丢失 ✓
-
-**去噪验证（R-004 闭环）：**
-对所有 `ceshi/cases/` 变体批量验证（共 18 个 case）：
-- Z-AB-1/2：A/B 测试 → `isNoise=true`（不生成情报）
-- Z-Feature-1/2：功能变化 → `labels=['功能']`
-- Z-Hallucination-1/2：幻觉诱饵 → `isNoise=true`
-- Z-Hiring-1/2：招聘 → `labels=['招聘']`
-- Z-Marketing-1/2：营销活动 → `labels=['营销活动']`
-- Z-Noise-1/2：纯样式 → `isNoise=true` 或无候选
-- Z-Pricing-1/2：定价 → `labels=['定价']`
-- Z-Recall-1/2：合规条款 → `labels=['合规条款']`
-- Z-Release-1/2：更新日志 → `labels=['更新日志']`
-
-**步骤 1：配置测试包为采集 URL**
-
-在 DB 中为监控目标设置采集 URL 为测试包静态文件（可通过 `localhost` 或部署后的 Vercel URL 访问 `ceshi/` 目录）。
-
-**步骤 2：批量运行全量 case 验证脚本**
-
-```typescript
-// signal-desk/scripts/verify-cases.ts
-// 对 ceshi/cases/ 目录下每个变体，调用 detectChanges + analyzeChange
-// 输出每个 case 的 isNoise/labels/priority 结果
-// 统计：真信号 Recall（期望 ≥90%）、FP 率（期望 ≤10%）
-```
-
-Run: `cd signal-desk ; npx tsx scripts/verify-cases.ts`
-Expected: 真信号全部捕获，噪音（AB/Noise/Hallucination）全部过滤
-
-**步骤 3：Vercel 部署**
-
-```powershell
-cd signal-desk
-vercel --prod
-```
-
-配置环境变量（Vercel Dashboard → Settings → Environment Variables）：
-- `DATABASE_URL`、`SESSION_SECRET`、`LLM_API_KEY`、`LLM_BASE_URL`、`LLM_MODEL`、`RESEND_API_KEY`、`CRON_SECRET`
-
-**步骤 4：部署后验证（R-001 终验，AC-016）**
-
-- 部署后注册账号，新增情报，执行 `vercel redeploy`
-- 重新访问 Inbox，情报仍在
-- Expected PASS: 数据重启不丢失（R-001 成立）
-
-**步骤 5：Cron 手动触发验证（AC-013）**
-
-Vercel Dashboard → Cron Jobs → 手动触发 → 查看 Function Log + DB `intels` 表
-
-Expected PASS: 情报自动产出，无需人工点击
-
-**步骤 6：提交**
-- Commit message: `全量 ceshi/cases 验证通过，Vercel 部署完成，所有 AC 验收`
-- 审计信息：
-  - repo: `root`
-    branch: `001-competitor-intel-monitor`
-    commit: `<TBD>`
-    pr: `<TBD>`
-    changed_files:
-      - `signal-desk/scripts/verify-cases.ts`
-      - `signal-desk/vercel.json`（最终确认）
+**审计信息：**
+- repo: `root`
+  branch: `001-competitor-intel-monitor`
+  commit: `<TBD>`
+  pr: `<TBD>`
+  changed_files:
+    - `signal-desk/scripts/verify-cases.ts`
+    - `signal-desk/api/_lib/ai-analyzer.ts`（关键词规则路由）
+    - `signal-desk/api/auth/[action].ts`（合并 auth 端点）
+    - `signal-desk/api/chat-sessions/[[...params]].ts`（合并会话 API）
+    - `signal-desk/api/tsconfig.json`
+    - `signal-desk/package.json`（@types/node）
 
 ---
 

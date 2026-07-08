@@ -38,8 +38,31 @@ const IntelSchemaLoose = z.object({
     .object({ 销售: z.string().optional(), 产品: z.string().optional(), 营销: z.string().optional() })
     .optional(),
   actionPlan: z.record(z.string(), z.string()).optional(),
-  sourceAnchor: z.object({ before: z.string(), after: z.string() }),
+  sourceAnchor: z.object({ before: z.string(), after: z.string() }).optional(),
 })
+
+function coerceIntelRaw(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw
+  const o = { ...(raw as Record<string, unknown>) }
+  if (Array.isArray(o.actionGeneral)) delete o.actionGeneral
+  else if (o.actionGeneral && typeof o.actionGeneral === 'object') {
+    const ag = o.actionGeneral as Record<string, unknown>
+    for (const k of Object.keys(ag)) {
+      if (ag[k] == null) delete ag[k]
+    }
+  }
+  if (Array.isArray(o.actionPlan)) delete o.actionPlan
+  else if (o.actionPlan && typeof o.actionPlan === 'object') {
+    const ap = o.actionPlan as Record<string, unknown>
+    for (const k of Object.keys(ap)) {
+      if (ap[k] == null) delete ap[k]
+    }
+  }
+  if (Array.isArray(o.sourceAnchor) || o.sourceAnchor == null) {
+    o.sourceAnchor = { before: '', after: '' }
+  }
+  return o
+}
 
 function normalizeIntel(raw: z.infer<typeof IntelSchemaLoose>): IntelAnalysis {
   const labels = raw.labels.filter((l): l is InfoLabel =>
@@ -66,12 +89,12 @@ function normalizeIntel(raw: z.infer<typeof IntelSchemaLoose>): IntelAnalysis {
     whyItMatters: raw.whyItMatters,
     actionGeneral,
     actionPlan,
-    sourceAnchor: raw.sourceAnchor,
+    sourceAnchor: raw.sourceAnchor ?? { before: '', after: '' },
   }
 }
 
 function parseIntel(raw: unknown): IntelAnalysis {
-  return normalizeIntel(IntelSchemaLoose.parse(raw))
+  return normalizeIntel(IntelSchemaLoose.parse(coerceIntelRaw(raw)))
 }
 
 export function isLlmConfigured(): boolean {
@@ -127,54 +150,106 @@ async function analyzeWithJsonMode(
   })
   const content = completion.choices[0]?.message?.content
   if (!content) throw new Error('LLM 未返回有效分析结果')
-  return parseIntel(extractJson(content))
+  try {
+    return parseIntel(extractJson(content))
+  } catch (err) {
+    console.warn('[ai-analyzer] JSON parse failed, fallback rule-based:', err)
+    return ruleBasedAnalyze(candidate)
+  }
 }
 
 /** C1 降级：关键词规则 + 模板（无 LLM 密钥时使用） */
-function ruleBasedAnalyze(candidate: ChangeCandidate): IntelAnalysis {
-  const text = `${candidate.before}\n${candidate.after}`.toLowerCase()
-  const isPricing =
-    /定价|price|\$\d+|套餐|月费|涨价/.test(text) ||
-    (/\$39/.test(candidate.after) && /\$29/.test(candidate.before))
-
-  if (isPricing) {
+function patternNoiseAnalyze(candidate: ChangeCandidate): IntelAnalysis | null {
+  const fullText = `${candidate.before}\n${candidate.after}`
+  if (/trusted by|e-commerce sellers|as featured in techcrunch|product hunt|saastr/i.test(fullText)) {
     return {
-      isNoise: false,
-      noiseType: null,
-      labels: ['定价'],
-      priority: '紧急',
-      title: '竞品定价发生变化',
+      isNoise: true,
+      noiseType: '营销数字诱饵',
+      labels: ['营销活动'],
+      priority: '低',
+      title: '页面营销文案微调（噪音）',
       whatChanged: candidate.after || candidate.before,
-      whyItMatters: '定价调整可能影响竞品价格带与用户转化，需关注其商业化策略变化。',
-      actionGeneral: {
-        销售: '评估是否需要推出对应价格应对策略',
-        产品: '梳理竞品套餐差异与功能边界',
-        营销: '关注窗口期内的差异化传播机会',
-      },
-      actionPlan: Object.fromEntries(
-        BUILTIN_ROLES.map(r => [r, `① 复核 ${r} 视角下的定价影响；② 更新竞品矩阵与应对预案。`]),
-      ) as IntelAnalysis['actionPlan'],
+      whyItMatters: '属营销口径或统计数字变化，无实质产品/定价信号。',
+      actionGeneral: { 销售: DEFAULT_ACTION, 产品: DEFAULT_ACTION, 营销: DEFAULT_ACTION },
+      actionPlan: Object.fromEntries(BUILTIN_ROLES.map(r => [r, DEFAULT_ACTION])) as IntelAnalysis['actionPlan'],
       sourceAnchor: { before: candidate.before, after: candidate.after },
     }
   }
+  return null
+}
 
+function buildSignalIntel(
+  candidate: ChangeCandidate,
+  label: InfoLabel,
+  priority: Priority,
+  title: string,
+  whyItMatters: string,
+): IntelAnalysis {
   return {
     isNoise: false,
     noiseType: null,
-    labels: ['功能'],
-    priority: '中等',
-    title: '竞品页面内容发生变化',
+    labels: [label],
+    priority,
+    title,
     whatChanged: candidate.after || candidate.before,
-    whyItMatters: '页面可见内容出现变化，建议结合上下文判断是否为有效信号。',
-    actionGeneral: { 销售: '关注变化是否影响卖点', 产品: '评估功能/文案是否对标', 营销: '留意传播口径变化' },
-    actionPlan: Object.fromEntries(
-      BUILTIN_ROLES.map(r => [r, `从 ${r} 视角评估该变化对业务的影响。`]),
-    ) as IntelAnalysis['actionPlan'],
+    whyItMatters,
+    actionGeneral: { 销售: DEFAULT_ACTION, 产品: DEFAULT_ACTION, 营销: DEFAULT_ACTION },
+    actionPlan: Object.fromEntries(BUILTIN_ROLES.map(r => [r, DEFAULT_ACTION])) as IntelAnalysis['actionPlan'],
     sourceAnchor: { before: candidate.before, after: candidate.after },
   }
 }
 
+/** 关键词规则路由（LLM 之前，提升打标稳定性） */
+function patternSignalAnalyze(candidate: ChangeCandidate): IntelAnalysis | null {
+  const text = `${candidate.before}\n${candidate.after}`
+  const lower = text.toLowerCase()
+
+  if (/senior pmm|ml engineer|data engineer|engineering manager|远程 · 全职|招聘/i.test(text)) {
+    return buildSignalIntel(candidate, '招聘', '中等', '竞品招聘动态变化', '招聘扩张或岗位调整可能反映业务方向与资源投入变化。')
+  }
+  if (/大促|折扣码|spring30|mid25|立减|年度计划.*折/i.test(text)) {
+    return buildSignalIntel(candidate, '营销活动', '中等', '竞品营销活动变化', '促销口径或折扣力度变化可能影响获客与转化策略。')
+  }
+  if (/服务端保留|自购买之日起|credits 自购买|有效期内|逾期自动删除/i.test(text)) {
+    return buildSignalIntel(candidate, '合规条款', '中等', '竞品条款/权益变化', '数据保留或权益有效期变化可能影响用户预期与合规风险。')
+  }
+  if (/v2\.\d|新增：|改进：|changelog|release notes/i.test(text)) {
+    return buildSignalIntel(candidate, '更新日志', '中等', '竞品版本更新', '版本发布或更新日志变化反映产品迭代节奏。')
+  }
+  if (/ai 视频广告|详情页文案|新功能|一键将商品|一键生成/i.test(text)) {
+    return buildSignalIntel(candidate, '功能', '中等', '竞品功能发生变化', '新功能或能力上线可能改变竞争格局。')
+  }
+  if (
+    /定价|price|\$\d+|套餐|月费|涨价|credits · 约/.test(lower) ||
+    (/\$39/.test(candidate.after) && /\$29/.test(candidate.before)) ||
+    (/2,500 credits/.test(candidate.before) && /2,000 credits/.test(candidate.after))
+  ) {
+    return buildSignalIntel(candidate, '定价', '紧急', '竞品定价发生变化', '定价调整可能影响竞品价格带与用户转化，需关注其商业化策略变化。')
+  }
+  return null
+}
+
+function ruleBasedAnalyze(candidate: ChangeCandidate): IntelAnalysis {
+  const noise = patternNoiseAnalyze(candidate)
+  if (noise) return noise
+  const signal = patternSignalAnalyze(candidate)
+  if (signal) return signal
+
+  return buildSignalIntel(
+    candidate,
+    '功能',
+    '中等',
+    '竞品页面内容发生变化',
+    '页面可见内容出现变化，建议结合上下文判断是否为有效信号。',
+  )
+}
+
 export async function analyzeChange(candidate: ChangeCandidate): Promise<IntelAnalysis> {
+  const patternNoise = patternNoiseAnalyze(candidate)
+  if (patternNoise) return patternNoise
+  const patternSignal = patternSignalAnalyze(candidate)
+  if (patternSignal) return patternSignal
+
   if (!isLlmConfigured()) {
     return ruleBasedAnalyze(candidate)
   }

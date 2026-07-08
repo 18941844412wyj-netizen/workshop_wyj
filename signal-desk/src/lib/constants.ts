@@ -32,12 +32,40 @@ export function getRoleDefaultWeights(role: Role): Record<InfoLabel, number> {
   return { ...ROLE_DEFAULT_WEIGHTS['产品经理'] }
 }
 
+export interface CustomRole {
+  name: string
+  weights: Record<InfoLabel, number>
+}
+
+export interface EmailSettings {
+  enabled: boolean
+  recipientEmails: string[]
+  pushTime: string
+  pushContent: {
+    includeTitle: boolean
+    includeSummary: boolean
+    includeAction: boolean
+    includeLink: boolean
+  }
+}
+
+export const defaultEmailSettings = (): EmailSettings => ({
+  enabled: true,
+  recipientEmails: [],
+  pushTime: '09:00',
+  pushContent: { includeTitle: true, includeSummary: true, includeAction: true, includeLink: true },
+})
+
+export function getAllRoles(customRoles: CustomRole[]): Role[] {
+  return [...BUILTIN_ROLES, ...customRoles.map(r => r.name)]
+}
+
 export interface UserProfile {
   email?: string
   role: Role | null
   weights: Record<InfoLabel, number>
-  customRoles: unknown[]
-  emailSettings: unknown
+  customRoles: CustomRole[]
+  emailSettings: EmailSettings
   onboarded: boolean
 }
 
@@ -45,6 +73,18 @@ export async function fetchProfile(): Promise<UserProfile | null> {
   const res = await fetch('/api/profile', { credentials: 'include' })
   if (!res.ok) return null
   return res.json()
+}
+
+export async function saveProfile(body: Partial<UserProfile> & { onboarded?: boolean }): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch('/api/profile', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify(body),
+  })
+  const data = await res.json()
+  if (!res.ok) return { ok: false, error: data.error || '保存失败' }
+  return { ok: true }
 }
 
 export async function logout(): Promise<void> {

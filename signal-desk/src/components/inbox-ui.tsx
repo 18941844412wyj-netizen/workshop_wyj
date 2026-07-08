@@ -1,4 +1,5 @@
-import type { Priority } from '../lib/constants'
+import type { Priority, InfoLabel, Role } from '../lib/constants'
+import { INFO_LABELS, ROLE_DEFAULT_WEIGHTS } from '../lib/constants'
 
 export function PriorityBadge({ priority }: { priority: Priority }) {
   const cls = priority === '紧急' ? 'urgent' : priority === '中等' ? 'medium' : 'low'
@@ -95,6 +96,58 @@ export function InboxFilterPanel(props: FilterPanelProps) {
         </select>
       </div>
       <button type="button" className="btn btn-ghost btn-sm filter-panel-reset" onClick={onReset}>重置筛选</button>
+    </div>
+  )
+}
+
+interface WeightModalProps {
+  role: Role
+  weights: Record<InfoLabel, number>
+  onChange: (w: Record<InfoLabel, number>) => void
+  onSave: () => void
+  onClose: () => void
+  loading?: boolean
+  error?: string
+}
+
+export function WeightModal({ role, weights, onChange, onSave, onClose, loading, error }: WeightModalProps) {
+  const defaults = (ROLE_DEFAULT_WEIGHTS as Record<string, Record<InfoLabel, number>>)[role]
+    ?? { 定价: 3, 功能: 3, 更新日志: 3, 招聘: 2, 营销活动: 3, 合规条款: 2 }
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-wide" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>信息标签权重 · {role}</h3>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          <p className="text-sm text-muted mb-16">各角色有推荐默认权重（灰色标注）。调整后影响 Inbox 个性化排序。</p>
+          {error && <div className="banner banner-error">{error}</div>}
+          <div className="weight-grid">
+            {INFO_LABELS.map(label => (
+              <div key={label} className="weight-row">
+                <span className="weight-label">
+                  {label}
+                  <span className="weight-default-hint">默认 {defaults[label]}</span>
+                </span>
+                <div className="weight-btns">
+                  {[1, 2, 3, 4, 5].map(v => (
+                    <button key={v} type="button"
+                      className={'weight-btn' + (weights[label] === v ? ' active' : '')}
+                      onClick={() => onChange({ ...weights, [label]: v })}>{v}</button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>取消</button>
+          <button className="btn btn-primary" onClick={onSave} disabled={loading}>
+            {loading ? '保存中…' : '保存权重'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
