@@ -1,0 +1,51 @@
+export type BuiltinRole = '产品经理' | '市场营销负责人' | '创业者·创始人' | '投资人'
+export type Role = BuiltinRole | string
+export type Track = '生图' | '生视频' | 'Agent'
+export type CollectMode = 'manual' | 'scheduled'
+
+export interface Target {
+  id: string
+  name: string
+  url: string
+  track: Track
+  collectMode: CollectMode
+  schedule?: string
+  monitorStatus: '监控中' | '已暂停'
+}
+
+export const BUILTIN_ROLES: BuiltinRole[] = ['产品经理', '市场营销负责人', '创业者·创始人', '投资人']
+export const INFO_LABELS = ['定价', '功能', '更新日志', '招聘', '营销活动', '合规条款'] as const
+export type InfoLabel = typeof INFO_LABELS[number]
+
+export const ROLE_DEFAULT_WEIGHTS: Record<BuiltinRole, Record<InfoLabel, number>> = {
+  '产品经理': { 定价: 3, 功能: 5, 更新日志: 4, 招聘: 2, 营销活动: 3, 合规条款: 2 },
+  '市场营销负责人': { 定价: 4, 功能: 3, 更新日志: 2, 招聘: 2, 营销活动: 5, 合规条款: 2 },
+  '创业者·创始人': { 定价: 4, 功能: 4, 更新日志: 3, 招聘: 3, 营销活动: 4, 合规条款: 3 },
+  '投资人': { 定价: 5, 功能: 3, 更新日志: 2, 招聘: 4, 营销活动: 3, 合规条款: 4 },
+}
+
+export function getRoleDefaultWeights(role: Role): Record<InfoLabel, number> {
+  if ((ROLE_DEFAULT_WEIGHTS as Record<string, Record<InfoLabel, number>>)[role]) {
+    return { ...(ROLE_DEFAULT_WEIGHTS as Record<string, Record<InfoLabel, number>>)[role] }
+  }
+  return { ...ROLE_DEFAULT_WEIGHTS['产品经理'] }
+}
+
+export interface UserProfile {
+  email?: string
+  role: Role | null
+  weights: Record<InfoLabel, number>
+  customRoles: unknown[]
+  emailSettings: unknown
+  onboarded: boolean
+}
+
+export async function fetchProfile(): Promise<UserProfile | null> {
+  const res = await fetch('/api/profile', { credentials: 'include' })
+  if (!res.ok) return null
+  return res.json()
+}
+
+export async function logout(): Promise<void> {
+  await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
+}

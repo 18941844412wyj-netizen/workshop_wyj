@@ -583,7 +583,26 @@ Run: `cd signal-desk ; vercel dev`（同时启动 Vite + Serverless Functions）
 
 ### Task T4: 用户画像 + Onboarding（Profile API + 页面）
 
-- [ ] **状态**：未开始
+- [x] **状态**：已完成
+
+**验证结果摘要（2026-07-08）：**
+- `PUT /api/profile` 保存角色+权重+onboarded → PASS（`{"ok":true}`）
+- `GET /api/profile` → PASS（role=`市场营销负责人`，weights 含 `营销活动:5`）
+- `npm run build` → PASS
+- Onboarding 页面 + App 路由守卫已接入
+
+**审计信息：**
+- repo: `root`
+  branch: `001-competitor-intel-monitor`
+  commit: `<TBD>`
+  pr: `<TBD>`
+  changed_files:
+    - `signal-desk/api/profile.ts`
+    - `signal-desk/src/pages/OnboardingPage.tsx`
+    - `signal-desk/src/App.tsx`
+    - `signal-desk/src/components/AuthGuard.tsx`
+    - `signal-desk/src/components/RoleSelector.tsx`
+    - `signal-desk/src/lib/constants.ts`
 
 **代码仓范围：**
 - 根项目：`signal-desk/api/`、`signal-desk/src/pages/`
@@ -639,7 +658,23 @@ Expected PASS: 数据正确写入，页面跳转至 `/targets`
 
 ### Task T5: 监控目标管理（Targets API + 前端页面）
 
-- [ ] **状态**：未开始
+- [x] **状态**：已完成
+
+**验证结果摘要（2026-07-08）：**
+- `POST /api/targets` 新增 Midjourney → PASS（201 + 正确字段）
+- `GET /api/targets` → PASS（返回列表含新记录）
+- `npm run build` → PASS
+
+**审计信息：**
+- repo: `root`
+  branch: `001-competitor-intel-monitor`
+  commit: `<TBD>`
+  pr: `<TBD>`
+  changed_files:
+    - `signal-desk/api/targets/index.ts`
+    - `signal-desk/api/targets/[id].ts`
+    - `signal-desk/src/pages/TargetsPage.tsx`
+    - `signal-desk/src/components/Layout.tsx`
 
 **代码仓范围：**
 - 根项目：`signal-desk/api/targets/`、`signal-desk/src/pages/`
@@ -691,7 +726,22 @@ Expected PASS: 一条记录，字段正确
 
 ### Task T6: 采集层 + 变化检测（Collector + ChangeDetector）
 
-- [ ] **状态**：未开始
+- [x] **状态**：已完成
+
+**验证结果摘要（2026-07-08）：**
+- `npx tsx api/_lib/collector-test.ts` → PASS（Noise=0 meaningful，Pricing≥1）
+- `npm run build` → PASS
+
+**审计信息：**
+- repo: `root`
+  branch: `001-competitor-intel-monitor`
+  commit: `<TBD>`
+  pr: `<TBD>`
+  changed_files:
+    - `signal-desk/api/_lib/collector.ts`
+    - `signal-desk/api/_lib/change-detector.ts`
+    - `signal-desk/api/_lib/collector-test.ts`
+    - `signal-desk/package.json`
 
 **代码仓范围：**
 - 根项目：`signal-desk/api/_lib/`
