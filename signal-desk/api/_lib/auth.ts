@@ -74,6 +74,12 @@ export function withAuth(handler: AuthHandler) {
 }
 
 export function readJsonBody<T extends Record<string, unknown>>(req: VercelRequest): T {
-  if (typeof req.body === 'string') return JSON.parse(req.body) as T
-  return (req.body ?? {}) as T
+  const body = req.body
+  if (body && typeof body === 'object' && !Buffer.isBuffer(body)) {
+    return body as T
+  }
+  if (typeof body === 'string' && body.trim()) {
+    return JSON.parse(body) as T
+  }
+  return {} as T
 }

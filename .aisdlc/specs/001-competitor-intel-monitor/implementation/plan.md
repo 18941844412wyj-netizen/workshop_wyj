@@ -137,18 +137,18 @@ status: draft
 
 ### Task T1: 项目初始化（signal-desk/ + 依赖 + Vercel 配置 + Neon 连接验证）
 
-- [ ] **状态**：阻塞（步骤 8 Neon 连接验证 — 缺 `DATABASE_URL`）
+- [x] **状态**：已完成
 
 **验证结果摘要（2026-07-08）：**
 - `cd signal-desk ; npm install` → PASS
-- `cd signal-desk ; npm run build` → PASS（tsc + vite build 成功）
+- `cd signal-desk ; npm run build` → PASS
 - `vercel.json` SPA rewrite + Cron 占位 → PASS
-- `npx tsx api/_lib/db-test.ts` → **BLOCKED**：`.env.local` 中 `DATABASE_URL=postgres://replace_me` 为占位符，需配置真实 Neon 连接串后重跑
+- `npx tsx api/_lib/db-test.ts` → PASS（输出 `1`；验证后已删除 db-test.ts）
 
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `3dd2d72`
+  commit: `<TBD>`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/package.json`
@@ -165,7 +165,6 @@ status: draft
     - `signal-desk/api/_lib/auth.ts`
     - `signal-desk/api/_lib/types.ts`
     - `signal-desk/api/_lib/env.ts`
-    - `signal-desk/api/_lib/db-test.ts`
 
 **代码仓范围：**
 - 根项目：`signal-desk/`（新建目录）
@@ -296,19 +295,21 @@ Expected: 控制台输出 `1`
 
 ### Task T2: 数据库 DDL（全量建表 + 迁移运行）
 
-- [ ] **状态**：代码已编写，待 T1 Neon 验证通过后执行迁移
+- [x] **状态**：已完成
 
 **验证结果摘要（2026-07-08）：**
-- `npx tsx db/migrate.ts` → **未执行**（依赖 `DATABASE_URL`）
+- `npx tsx db/migrate.ts` → PASS（`Migration complete`）
+- `npx tsx db/verify-tables.ts` → PASS（9 张表：chat_sessions, conv_messages, feedback, intels, notifications, profiles, snapshots, targets, users）
 
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `3dd2d72`
+  commit: `<TBD>`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/db/schema.sql`
     - `signal-desk/db/migrate.ts`
+    - `signal-desk/db/verify-tables.ts`
 
 **代码仓范围：**
 - 根项目：`signal-desk/db/`
@@ -478,23 +479,31 @@ Expected: 打印出 9 张表名（users/profiles/targets/snapshots/intels/feedba
 
 ### Task T3: Auth API（注册/登录/登出 + 前端登录/注册页）
 
-- [ ] **状态**：代码已编写，待 T2 迁移完成后验证
+- [x] **状态**：已完成
 
 **验证结果摘要（2026-07-08）：**
-- `vercel dev` + curl 注册/登录 → **未执行**（依赖 DB 迁移 + `SESSION_SECRET`）
+- `vercel dev --listen 3000 --yes` + curl → PASS
+- `POST /api/auth/register` → 200 `{"ok":true}` + Set-Cookie
+- `POST /api/auth/login` → 200 `{"ok":true}`
+- `POST /api/auth/logout` → 200 `{"ok":true}`
+- `GET /api/profile`（无 Cookie）→ 401
+- `GET /api/profile`（有 Cookie）→ 200 含 profile 字段
+- 修复：`api/profile.ts` 导入路径、`login.ts`/`logout.ts` 内容互换、`readJsonBody` 兼容 Vercel body 解析
 
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `3dd2d72`
+  commit: `<TBD>`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/api/auth/register.ts`
     - `signal-desk/api/auth/login.ts`
     - `signal-desk/api/auth/logout.ts`
     - `signal-desk/api/profile.ts`
+    - `signal-desk/api/_lib/auth.ts`
     - `signal-desk/src/pages/LoginPage.tsx`
     - `signal-desk/src/pages/RegisterPage.tsx`
+    - `signal-desk/index.html`
 
 **代码仓范围：**
 - 根项目：`signal-desk/api/auth/`、`signal-desk/src/pages/`

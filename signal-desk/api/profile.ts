@@ -1,6 +1,6 @@
 import type { VercelResponse } from '@vercel/node'
-import { withAuth, type AuthenticatedRequest } from '../_lib/auth'
-import { sql } from '../_lib/db'
+import { withAuth, type AuthenticatedRequest } from './_lib/auth'
+import { sql } from './_lib/db'
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
