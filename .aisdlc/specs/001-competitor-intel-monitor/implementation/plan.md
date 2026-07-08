@@ -148,7 +148,7 @@ status: draft
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `<待提交>`
+  commit: `3dd2d72`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/package.json`
@@ -304,7 +304,7 @@ Expected: 控制台输出 `1`
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `<待提交>`
+  commit: `3dd2d72`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/db/schema.sql`
@@ -486,7 +486,7 @@ Expected: 打印出 9 张表名（users/profiles/targets/snapshots/intels/feedba
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `<待提交>`
+  commit: `3dd2d72`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/api/auth/register.ts`
