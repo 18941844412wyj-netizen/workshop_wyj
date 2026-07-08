@@ -1,0 +1,13 @@
+# 本地/原型目录，不纳入版本库
+ceshi/
+demo/
+qdskill/
+yuanshixuqiu/
+
+# 编辑器
+.vscode/
+
+# 环境变量
+.env
+.env.local
+.env.*.local
