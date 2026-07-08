@@ -1178,7 +1178,7 @@ Expected PASS: AC-001/003/004/005/006/009/014 通过
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `<TBD>`
+  commit: `fe780ac`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/src/pages/SettingsPage.tsx`
@@ -1201,7 +1201,7 @@ Expected PASS: AC-001/003/004/005/006/009/014 通过
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `<TBD>`
+  commit: `fe780ac`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/src/App.tsx`
@@ -1222,7 +1222,7 @@ Expected PASS: AC-001/003/004/005/006/009/014 通过
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `<TBD>`
+  commit: `fe780ac`
   pr: `<TBD>`
   changed_files:
     - `signal-desk/scripts/verify-cases.ts`
