@@ -84,10 +84,10 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
           analysis_status, is_noise
         ) VALUES (
           ${targetId}, ${userId}, ${prevRows[0].id}, ${curr.snapshotId},
-          ${analysis.labels}, ${analysis.priority}, ${analysis.title},
+          ${sql.json(analysis.labels)}, ${analysis.priority}, ${analysis.title},
           ${analysis.whatChanged}, ${analysis.whyItMatters},
-          ${analysis.actionGeneral}, ${analysis.actionPlan},
-          ${analysis.sourceAnchor}, ${matchScore},
+          ${sql.json(analysis.actionGeneral)}, ${sql.json(analysis.actionPlan)},
+          ${sql.json(analysis.sourceAnchor)}, ${matchScore},
           'success', false
         ) RETURNING id
       `
@@ -109,9 +109,9 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
           analysis_status, is_noise
         ) VALUES (
           ${targetId}, ${userId}, ${prevRows[0].id}, ${curr.snapshotId},
-          ${[]}, '低', '分析失败', ${candidate.after || candidate.before},
-          '自动分析未能完成', ${{}}, ${{}},
-          ${{ before: candidate.before, after: candidate.after }},
+          ${sql.json([])}, '低', '分析失败', ${candidate.after || candidate.before},
+          '自动分析未能完成', ${sql.json({})}, ${sql.json({})},
+          ${sql.json({ before: candidate.before, after: candidate.after })},
           'failed', false
         ) RETURNING id
       `

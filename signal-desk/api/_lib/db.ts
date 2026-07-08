@@ -36,7 +36,18 @@ function getSql(): Sql {
   return sqlInstance
 }
 
-export const sql: Sql = ((
-  strings: TemplateStringsArray,
-  ...values: unknown[]
-) => getSql()(strings, ...values)) as Sql
+function sqlTemplate(strings: TemplateStringsArray, ...values: unknown[]) {
+  return getSql()(strings, ...(values as Parameters<Sql>[1][]))
+}
+
+export const sql: Sql = new Proxy(sqlTemplate as Sql, {
+  apply(_target, _thisArg, args) {
+    const [strings, ...values] = args as [TemplateStringsArray, ...unknown[]]
+    return getSql()(strings, ...(values as Parameters<Sql>[1][]))
+  },
+  get(_target, prop) {
+    const instance = getSql()
+    const value = Reflect.get(instance, prop, instance)
+    return typeof value === 'function' ? value.bind(instance) : value
+  },
+})

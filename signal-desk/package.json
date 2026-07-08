@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:api": "npx vercel dev --listen 3001 --yes",
-    "build": "tsc && vite build",
+    "build": "tsc && tsc -p api/tsconfig.json && vite build",
     "preview": "vite preview",
     "setup:headless": "npx playwright install chromium",
     "db:migrate": "tsx db/migrate.ts",

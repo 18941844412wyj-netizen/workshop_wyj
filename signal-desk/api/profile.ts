@@ -1,4 +1,5 @@
 import type { VercelResponse } from '@vercel/node'
+import type { JSONValue } from 'postgres'
 import { withAuth, readJsonBody, type AuthenticatedRequest } from './_lib/auth'
 import { sql } from './_lib/db'
 import { parseJsonField } from './_lib/jsonb'
@@ -81,7 +82,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       }
 
       const customRoles = body.customRoles ?? []
-      const emailSettings = body.emailSettings ?? defaultEmailSettings()
+      const emailSettings = (body.emailSettings ?? defaultEmailSettings()) as EmailSettings
       const onboarded = body.onboarded ?? false
 
       await sql`
@@ -89,9 +90,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         VALUES (
           ${req.userId},
           ${role},
-          ${weights},
-          ${customRoles},
-          ${emailSettings},
+          ${sql.json(weights)},
+          ${sql.json(customRoles as unknown as JSONValue)},
+          ${sql.json(emailSettings as unknown as JSONValue)},
           ${onboarded},
           NOW()
         )
