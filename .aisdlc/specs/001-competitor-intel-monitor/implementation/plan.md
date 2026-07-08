@@ -108,11 +108,11 @@ status: draft
 
 ## NEEDS CLARIFICATION（未消除前不得进入 I2）
 
-- C1（LLM 密钥与 Structured Outputs 支持）
-  - 缺什么：需要 `LLM_API_KEY`、`LLM_BASE_URL`（如非 OpenAI）、`LLM_MODEL`；且目标模型必须支持 `strict json_schema`（Structured Outputs）
-  - 取证/验证方式：T6 实现后，用提供的密钥对任意 `cases/` 变体做一次端到端 `/api/analyze` 调用，检查返回 schema 是否合规
-  - 成功信号：JSON 响应字段完整（labels/priority/whatChanged/whyItMatters/actionGeneral/actionPlan/sourceAnchor/isNoise）无 parse 错误
-  - 下一步动作：不成立则使用 JSON mode + 重试校验兜底；打标降级关键词规则；不阻塞 T7 以后（Analyzer 按失败状态写 DB）
+- C1（LLM 密钥与 Structured Outputs 支持）— **已解除（2026-07-08）**
+  - 已配置：智谱 `glm-4-flash`（`LLM_BASE_URL=https://open.bigmodel.cn/api/paas/v4/`）
+  - 验证：`npx tsx api/_lib/llm-test.ts` PASS（~21s，labels=`["定价"]`，priority=`紧急`）
+  - 说明：智谱不支持 `strict json_schema`；已实现 JSON mode + 宽松 Zod 规范化兜底（ADR-0003 兼容路径）
+  - 密钥仅存于 `signal-desk/.env.local`（未提交 git）；部署时需同步至 Vercel 环境变量
 
 - C2（Resend API Key 与域名验证）
   - 缺什么：`RESEND_API_KEY`；若需自定义发件域名需额外 DNS 验证（可用 `onboarding@resend.dev` 免验证测试）
@@ -821,12 +821,13 @@ Expected PASS: noise → 0 个有意义候选；pricing → ≥1 个候选
 
 ### Task T7: AI 打标+分析引擎（AIAnalyzer + /api/analyze）
 
-- [x] **状态**：已完成（LLM 密钥未配置，test:// URL 使用规则降级分析）
+- [x] **状态**：已完成（LLM 已配置智谱 glm-4-flash；strict schema 不可用时自动降级 JSON mode）
 
 **验证结果摘要（2026-07-08）：**
 - `test://index.html` → 基准快照 → PASS
 - `test://cases/Z-Pricing-1.html` → analyze → PASS（intelIds 含 1 条，`labels: ["定价"]`）
 - 非 test:// URL 且无 LLM 密钥 → 404 `LLM 配置缺失`（符合 plan）
+- `npx tsx api/_lib/llm-test.ts` → PASS（智谱 LLM 真实调用，JSON mode 兜底）
 - `npm run build` → PASS
 
 **审计信息：**
