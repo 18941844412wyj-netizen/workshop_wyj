@@ -1,6 +1,6 @@
 import { sql } from './db.js'
 import { defaultEmailSettings, type EmailSettings } from './types.js'
-import { isMailConfigured, sendMail } from './mailer.js'
+import { isMailConfigured, isResendConfigured, sendMail } from './mailer.js'
 
 /** 邮件是否可用（Resend 或 SMTP 已配置） */
 export function isEmailConfigured(): boolean {
@@ -216,10 +216,53 @@ export async function sendDailyDigest(userId: string): Promise<DigestResult> {
 /**
  * 立即发送今日真实情报（按优先级排序，最多 10 条）。
  * 若当日暂无情报则发一封空摘要提示。收件人取设置里的邮箱，无则取账号邮箱。
+ * Resend 测试模式下：若设置了 RESEND_ACCOUNT_EMAIL，强制用该地址作为唯一收件人，
+ * 避免因用户未保存设置而导致收件人仍为 QQ 邮箱被 Resend 拒绝。
  */
 export async function sendTestEmail(userId: string): Promise<{ ok: boolean; error?: string; to?: string[] }> {
   if (!isMailConfigured()) return { ok: false, error: '邮件未配置，请先设置 RESEND_API_KEY 或 SMTP 参数' }
 
+  // Resend 测试模式：强制使用 RESEND_ACCOUNT_EMAIL（环境变量），跳过 DB 设置
+  const resendAccountEmail = process.env.RESEND_ACCOUNT_EMAIL
+  if (isResendConfigured() && resendAccountEmail) {
+    const recipients = [resendAccountEmail]
+    const settings = await loadSettings(userId)
+    const appUrl = getAppUrl()
+    const rows = await sql`
+      SELECT id, title, what_changed, why_it_matters, action_general, priority
+      FROM intels
+      WHERE user_id = ${userId}
+        AND is_noise = false
+        AND analysis_status = 'success'
+        AND created_at >= NOW() - INTERVAL '25 hours'
+      ORDER BY
+        CASE priority WHEN '紧急' THEN 0 WHEN '中等' THEN 1 ELSE 2 END,
+        created_at DESC
+      LIMIT 10
+    `
+    if (rows.length === 0) {
+      const { ok, error } = await sendMail({
+        to: recipients,
+        subject: '【Signal Desk】今日暂无新情报',
+        html: wrapEmail('今日情报摘要', `<p style="color:#344054;margin:0">今日（过去 25 小时内）暂无新的竞品情报，邮件推送已配置成功。</p>`),
+      })
+      return { ok, error, to: recipients }
+    }
+    const intels = rows as unknown as IntelEmailRow[]
+    const urgentCount = intels.filter(i => i.priority === '紧急').length
+    const heading = urgentCount > 0
+      ? `今日紧急情报 · ${urgentCount} 条紧急 / 共 ${intels.length} 条`
+      : `今日情报摘要 · 共 ${intels.length} 条`
+    const body = intels.map(i => buildIntelBlock(i, settings, appUrl)).join('\n')
+    const { ok, error } = await sendMail({
+      to: recipients,
+      subject: `【Signal Desk】今日情报 · ${intels.length} 条${urgentCount > 0 ? `（${urgentCount} 条紧急）` : ''}`,
+      html: wrapEmail(heading, body),
+    })
+    return { ok, error, to: recipients }
+  }
+
+  // 通用路径：从 DB 设置读取收件人
   const settings = await loadSettings(userId)
   let recipients = getRecipients(settings)
   if (recipients.length === 0) {
@@ -230,8 +273,6 @@ export async function sendTestEmail(userId: string): Promise<{ ok: boolean; erro
   if (recipients.length === 0) return { ok: false, error: '没有可用的收件邮箱' }
 
   const appUrl = getAppUrl()
-
-  // 查询今日真实情报（25 小时内，非噪音，按优先级排序，最多 10 条）
   const rows = await sql`
     SELECT id, title, what_changed, why_it_matters, action_general, priority
     FROM intels
@@ -244,26 +285,19 @@ export async function sendTestEmail(userId: string): Promise<{ ok: boolean; erro
       created_at DESC
     LIMIT 10
   `
-
   if (rows.length === 0) {
-    // 暂无情报时发提示邮件
     const { ok, error } = await sendMail({
       to: recipients,
       subject: '【Signal Desk】今日暂无新情报',
-      html: wrapEmail(
-        '今日情报摘要',
-        `<p style="color:#344054;margin:0">今日（过去 25 小时内）暂无新的竞品情报，SMTP 配置已验证正常。</p>`,
-      ),
+      html: wrapEmail('今日情报摘要', `<p style="color:#344054;margin:0">今日（过去 25 小时内）暂无新的竞品情报，邮件推送已配置成功。</p>`),
     })
     return { ok, error, to: recipients }
   }
-
   const intels = rows as unknown as IntelEmailRow[]
   const urgentCount = intels.filter(i => i.priority === '紧急').length
   const heading = urgentCount > 0
     ? `今日紧急情报 · ${urgentCount} 条紧急 / 共 ${intels.length} 条`
     : `今日情报摘要 · 共 ${intels.length} 条`
-
   const body = intels.map(i => buildIntelBlock(i, settings, appUrl)).join('\n')
   const { ok, error } = await sendMail({
     to: recipients,
