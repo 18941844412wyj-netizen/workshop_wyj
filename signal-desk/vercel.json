@@ -9,10 +9,5 @@
     "api/**/*.ts": {
       "maxDuration": 60
     }
-  },
-  "crons": [
-    { "path": "/api/cron/digest", "schedule": "0 1 * * *" },
-    { "path": "/api/cron/digest", "schedule": "0 4 * * *" },
-    { "path": "/api/cron/digest", "schedule": "0 10 * * *" }
-  ]
+  }
 }
