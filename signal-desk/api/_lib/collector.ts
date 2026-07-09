@@ -1,7 +1,8 @@
 import { readFileSync, existsSync } from 'fs'
 import { join, dirname } from 'path'
 import { fileURLToPath } from 'url'
-import { isHeadlessEnabled, renderPageHtml, shouldHeadlessFallback } from './headless-renderer'
+import type { Sql } from 'postgres'
+import { isHeadlessEnabled, renderPageHtml, shouldHeadlessFallback } from './headless-renderer.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const CESHI_ROOT = join(__dirname, '../../../ceshi')
@@ -84,17 +85,17 @@ export async function fetchPageHtml(url: string): Promise<{ html: string; jsFall
 /** 采集并写入 snapshots 表 */
 export async function collectSnapshot(
   target: CollectTarget,
-  sql: { (strings: TemplateStringsArray, ...values: unknown[]): Promise<Record<string, unknown>[]> },
+  db: Sql,
 ): Promise<CollectResult> {
   const { html, jsFallbackUsed } = await fetchPageHtml(target.url)
   const textContent = extractText(html)
 
-  const prev = await sql`
+  const prev = await db`
     SELECT COALESCE(MAX(version), 0) AS v FROM snapshots WHERE target_id = ${target.id}
   `
   const version = Number((prev[0] as { v: number }).v) + 1
 
-  const rows = await sql`
+  const rows = await db`
     INSERT INTO snapshots (target_id, html, text_content, version)
     VALUES (${target.id}, ${html}, ${textContent}, ${version})
     RETURNING id

@@ -1,15 +1,16 @@
-import { sql } from './db'
-import { collectSnapshot } from './collector'
-import { detectChanges } from './change-detector'
-import { analyzeChange, isLlmConfigured } from './ai-analyzer'
-import { sendNotification } from './notifier'
-import { parseJsonField } from './jsonb'
-import { calcMatchScore, getRoleDefaultWeights, type InfoLabel, type Priority } from './types'
+import { sql } from './db.js'
+import { collectSnapshot } from './collector.js'
+import { detectChanges } from './change-detector.js'
+import { analyzeChange, isLlmConfigured } from './ai-analyzer.js'
+import { sendNotification } from './notifier.js'
+import { parseJsonField } from './jsonb.js'
+import { calcMatchScore, getRoleDefaultWeights, type InfoLabel, type Priority } from './types.js'
 
 export interface RunAnalysisResult {
   ok: boolean
   intelIds: string[]
   generated: number
+  noiseRecorded: number
   message?: string
   error?: string
 }
@@ -20,10 +21,10 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
       SELECT url FROM targets WHERE id = ${targetId} AND user_id = ${userId} LIMIT 1
     `
     if (targetRows.length === 0) {
-      return { ok: false, intelIds: [], generated: 0, error: '目标不存在' }
+      return { ok: false, intelIds: [], generated: 0, noiseRecorded: 0, error: '目标不存在' }
     }
     if (!(targetRows[0].url as string).startsWith('test://')) {
-      return { ok: false, intelIds: [], generated: 0, error: 'LLM 配置缺失' }
+      return { ok: false, intelIds: [], generated: 0, noiseRecorded: 0, error: 'LLM 配置缺失' }
     }
   }
 
@@ -31,7 +32,7 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
     SELECT id, url, name FROM targets WHERE id = ${targetId} AND user_id = ${userId} LIMIT 1
   `
   if (targets.length === 0) {
-    return { ok: false, intelIds: [], generated: 0, error: '目标不存在' }
+    return { ok: false, intelIds: [], generated: 0, noiseRecorded: 0, error: '目标不存在' }
   }
   const target = targets[0]
 
@@ -46,13 +47,13 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
     ORDER BY version DESC LIMIT 1
   `
   if (prevRows.length === 0) {
-    return { ok: true, intelIds: [], generated: 0, message: '已保存基准快照，等待下次变化' }
+    return { ok: true, intelIds: [], generated: 0, noiseRecorded: 0, message: '已保存基准快照，等待下次变化' }
   }
 
   const prevText = (prevRows[0].text_content as string) || ''
   const candidates = detectChanges(prevText, curr.textContent)
   if (candidates.length === 0) {
-    return { ok: true, intelIds: [], generated: 0, message: '无重大变化' }
+    return { ok: true, intelIds: [], generated: 0, noiseRecorded: 0, message: '无重大变化' }
   }
 
   const profileRows = await sql`
@@ -64,11 +65,31 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
   )
 
   const intelIds: string[] = []
+  let noiseRecorded = 0
 
   for (const candidate of candidates) {
     try {
       const analysis = await analyzeChange(candidate)
-      if (analysis.isNoise) continue
+      if (analysis.isNoise) {
+        // badcase：检测到变化但判定为噪音——记录留痕（不推送、默认不进主列表）
+        await sql`
+          INSERT INTO intels (
+            target_id, user_id, snapshot_before_id, snapshot_after_id,
+            labels, priority, title, what_changed, why_it_matters,
+            action_general, action_plan, source_anchor, match_score,
+            analysis_status, is_noise, noise_type
+          ) VALUES (
+            ${targetId}, ${userId}, ${prevRows[0].id}, ${curr.snapshotId},
+            ${sql.json(analysis.labels)}, ${analysis.priority}, ${analysis.title},
+            ${analysis.whatChanged}, ${analysis.whyItMatters},
+            ${sql.json(analysis.actionGeneral)}, ${sql.json(analysis.actionPlan)},
+            ${sql.json(analysis.sourceAnchor)}, 0,
+            'success', true, ${analysis.noiseType ?? null}
+          )
+        `
+        noiseRecorded++
+        continue
+      }
 
       const matchScore = calcMatchScore(
         analysis.labels as InfoLabel[],
@@ -84,10 +105,10 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
           analysis_status, is_noise
         ) VALUES (
           ${targetId}, ${userId}, ${prevRows[0].id}, ${curr.snapshotId},
-          ${analysis.labels}, ${analysis.priority}, ${analysis.title},
+          ${sql.json(analysis.labels)}, ${analysis.priority}, ${analysis.title},
           ${analysis.whatChanged}, ${analysis.whyItMatters},
-          ${analysis.actionGeneral}, ${analysis.actionPlan},
-          ${analysis.sourceAnchor}, ${matchScore},
+          ${sql.json(analysis.actionGeneral)}, ${sql.json(analysis.actionPlan)},
+          ${sql.json(analysis.sourceAnchor)}, ${matchScore},
           'success', false
         ) RETURNING id
       `
@@ -109,9 +130,9 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
           analysis_status, is_noise
         ) VALUES (
           ${targetId}, ${userId}, ${prevRows[0].id}, ${curr.snapshotId},
-          ${[]}, '低', '分析失败', ${candidate.after || candidate.before},
-          '自动分析未能完成', ${{}}, ${{}},
-          ${{ before: candidate.before, after: candidate.after }},
+          ${sql.json([])}, '低', '分析失败', ${candidate.after || candidate.before},
+          '自动分析未能完成', ${sql.json({})}, ${sql.json({})},
+          ${sql.json({ before: candidate.before, after: candidate.after })},
           'failed', false
         ) RETURNING id
       `
@@ -119,5 +140,5 @@ export async function runAnalysis(targetId: string, userId: string): Promise<Run
     }
   }
 
-  return { ok: true, intelIds, generated: intelIds.length }
+  return { ok: true, intelIds, generated: intelIds.length, noiseRecorded }
 }

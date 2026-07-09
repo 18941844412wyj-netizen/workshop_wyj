@@ -1,6 +1,6 @@
 import type { VercelResponse } from '@vercel/node'
-import { withAuth, type AuthenticatedRequest } from '../_lib/auth'
-import { sql } from '../_lib/db'
+import { withAuth, type AuthenticatedRequest } from '../_lib/auth.js'
+import { sql } from '../_lib/db.js'
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method === 'GET') {

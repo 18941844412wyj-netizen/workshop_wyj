@@ -1,7 +1,7 @@
 import type { VercelResponse } from '@vercel/node'
-import { withAuth, readJsonBody, type AuthenticatedRequest } from '../_lib/auth'
-import { sql } from '../_lib/db'
-import type { CollectMode, Track } from '../_lib/types'
+import { withAuth, readJsonBody, type AuthenticatedRequest } from '../_lib/auth.js'
+import { sql } from '../_lib/db.js'
+import type { CollectMode, Track } from '../_lib/types.js'
 
 function mapTarget(row: Record<string, unknown>) {
   return {
@@ -26,7 +26,7 @@ function validateTargetBody(body: {
   if (!body.url?.trim()) return 'URL 不能为空'
   if (!/^https:\/\//.test(body.url.trim()) && !body.url.trim().startsWith('test://')) return 'URL 需以 https:// 或 test:// 开头'
   if (!['生图', '生视频', 'Agent'].includes(body.track ?? '')) return '无效赛道'
-  if (!['manual', 'scheduled'].includes(body.collectMode ?? '')) return '无效采集方式'
+  if (!['manual', 'scheduled', 'auto'].includes(body.collectMode ?? '')) return '无效采集方式'
   return null
 }
 

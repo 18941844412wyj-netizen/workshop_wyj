@@ -1,6 +1,6 @@
 import type { VercelResponse } from '@vercel/node'
-import { withAuth, readJsonBody, type AuthenticatedRequest } from './_lib/auth'
-import { runAnalysis } from './_lib/run-analysis'
+import { withAuth, readJsonBody, type AuthenticatedRequest } from './_lib/auth.js'
+import { runAnalysis } from './_lib/run-analysis.js'
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
@@ -23,6 +23,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   return res.status(200).json({
     ok: true,
     intelIds: result.intelIds,
+    generated: result.generated,
+    noiseRecorded: result.noiseRecorded,
     ...(result.message ? { message: result.message } : {}),
   })
 }

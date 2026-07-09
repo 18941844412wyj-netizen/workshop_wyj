@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import type { CollectMode, Target, Track } from '../lib/constants'
 import { Layout, Toast, ConfirmModal } from '../components/Layout'
+import { fetchProfileCached } from '../lib/profile-cache'
+
+let _targetsCache: Target[] | undefined
 
 interface ToastInfo { msg: string; type: 'success' | 'error' }
 
@@ -102,6 +105,10 @@ function TargetFormModal({
                 <input type="radio" name="collectMode" checked={collectMode === 'manual'} onChange={() => setCollectMode('manual')} />
                 <span className="role-item-label">手动即时触发</span>
               </label>
+              <label className={'role-item' + (collectMode === 'auto' ? ' selected' : '')}>
+                <input type="radio" name="collectMode" checked={collectMode === 'auto'} onChange={() => setCollectMode('auto')} />
+                <span className="role-item-label">自动采集（每1分钟）</span>
+              </label>
               <label className={'role-item' + (collectMode === 'scheduled' ? ' selected' : '')}>
                 <input type="radio" name="collectMode" checked={collectMode === 'scheduled'} onChange={() => setCollectMode('scheduled')} />
                 <span className="role-item-label">固定时间采集</span>
@@ -128,18 +135,22 @@ function TargetFormModal({
 }
 
 export default function TargetsPage() {
-  const [targets, setTargets] = useState<Target[]>([])
+  const [targets, setTargets] = useState<Target[]>(() => _targetsCache ?? [])
   const [userEmail, setUserEmail] = useState('')
   const [showAdd, setShowAdd] = useState(false)
   const [editTarget, setEditTarget] = useState<Target | null>(null)
   const [analyzing, setAnalyzing] = useState<Record<string, boolean>>({})
   const [toast, setToast] = useState<ToastInfo | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(_targetsCache === undefined)
 
   const refresh = async () => {
     const res = await fetch('/api/targets', { credentials: 'include' })
-    if (res.ok) setTargets(await res.json())
+    if (res.ok) {
+      const list = await res.json()
+      _targetsCache = list
+      setTargets(list)
+    }
   }
 
   const handleAnalyze = async (t: Target) => {
@@ -167,18 +178,23 @@ export default function TargetsPage() {
   }
 
   useEffect(() => {
-    Promise.all([
-      fetch('/api/targets', { credentials: 'include' }).then(r => r.ok ? r.json() : []),
-      fetch('/api/profile', { credentials: 'include' }).then(r => r.ok ? r.json() : null),
-    ]).then(([list, profile]) => {
-      setTargets(list)
+    fetchProfileCached().then(profile => {
       if (profile?.email) setUserEmail(profile.email)
-      setLoading(false)
     })
+    if (_targetsCache !== undefined) {
+      refresh()
+    } else {
+      fetch('/api/targets', { credentials: 'include' })
+        .then(r => r.ok ? r.json() : [])
+        .then(list => { _targetsCache = list; setTargets(list); setLoading(false) })
+    }
   }, [])
 
-  const collectLabel = (t: Target) =>
-    t.collectMode === 'manual' ? '手动即时触发' : `固定时间（${t.schedule ?? '未设置'}）`
+  const collectLabel = (t: Target) => {
+    if (t.collectMode === 'manual') return '手动即时触发'
+    if (t.collectMode === 'auto') return '自动采集（每1分钟）'
+    return `固定时间（${t.schedule ?? '未设置'}）`
+  }
 
   const handleDelete = async (id: string) => {
     const res = await fetch(`/api/targets/${id}`, { method: 'DELETE', credentials: 'include' })

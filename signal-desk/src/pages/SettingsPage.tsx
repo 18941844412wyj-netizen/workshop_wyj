@@ -7,6 +7,7 @@ import {
   getAllRoles,
   getRoleDefaultWeights,
   saveProfile,
+  sendTestEmail,
   type CustomRole,
   type EmailSettings,
   type InfoLabel,
@@ -35,6 +36,7 @@ export default function SettingsPage() {
   const [email, setEmail] = useState<EmailSettings>(defaultEmailSettings())
   const [newRoleName, setNewRoleName] = useState('')
   const [loading, setLoading] = useState(false)
+  const [testing, setTesting] = useState(false)
   const [pageLoading, setPageLoading] = useState(true)
   const [banner, setBanner] = useState('')
   const [toast, setToast] = useState('')
@@ -88,6 +90,18 @@ export default function SettingsPage() {
     setNewRoleName('')
     setErrors({})
     setToast('自定义角色已添加，保存设置后生效')
+  }
+
+  const handleTestEmail = async () => {
+    setBanner('')
+    setTesting(true)
+    try {
+      const res = await sendTestEmail()
+      if (res.ok) setToast(`今日情报已发送至 ${(res.to ?? []).join('、') || '收件邮箱'}，请查收`)
+      else setBanner(res.error || '发送失败')
+    } finally {
+      setTesting(false)
+    }
   }
 
   const updateEmailAt = (idx: number, val: string) => {
@@ -239,11 +253,14 @@ export default function SettingsPage() {
               <div className="field">
                 <label>推送时间</label>
                 <select value={email.pushTime} onChange={e => setEmail(p => ({ ...p, pushTime: e.target.value }))} disabled={!email.enabled}>
-                  <option value="09:00">每日 09:00</option>
-                  <option value="12:00">每日 12:00</option>
-                  <option value="18:00">每日 18:00</option>
-                  <option value="immediate">紧急情报即时推送</option>
+                  <option value="09:00">每日 09:00 摘要</option>
+                  <option value="12:00">每日 12:00 摘要</option>
+                  <option value="18:00">每日 18:00 摘要</option>
+                  <option value="immediate">全部即时推送（每条单独发）</option>
                 </select>
+                <p className="settings-section-desc mt-8">
+                  选择每日摘要时段时，<strong>紧急情报仍会即时推送</strong>，其余情报在所选时间汇总成一封发送。
+                </p>
               </div>
 
               <div className="field">
@@ -263,6 +280,17 @@ export default function SettingsPage() {
                     </label>
                   ))}
                 </div>
+              </div>
+
+              <div className="field">
+                <label>立即发送情报</label>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={handleTestEmail}
+                  disabled={testing || !email.enabled}>
+                  {testing ? '发送中…' : '发送今日情报'}
+                </button>
+                <p className="settings-section-desc mt-8">
+                  立即将今日真实情报（过去 25 小时内，按优先级排序）发送至收件邮箱。
+                </p>
               </div>
             </>
           )}

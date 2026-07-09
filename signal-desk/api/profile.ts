@@ -1,7 +1,8 @@
 import type { VercelResponse } from '@vercel/node'
-import { withAuth, readJsonBody, type AuthenticatedRequest } from './_lib/auth'
-import { sql } from './_lib/db'
-import { parseJsonField } from './_lib/jsonb'
+import type { JSONValue } from 'postgres'
+import { withAuth, readJsonBody, type AuthenticatedRequest } from './_lib/auth.js'
+import { sql } from './_lib/db.js'
+import { parseJsonField } from './_lib/jsonb.js'
 import {
   BUILTIN_ROLES,
   INFO_LABELS,
@@ -11,7 +12,8 @@ import {
   type EmailSettings,
   type InfoLabel,
   type Role,
-} from './_lib/types'
+} from './_lib/types.js'
+import { sendTestEmail as doSendTestEmail } from './_lib/notifier.js'
 
 function serializeProfile(p: Record<string, unknown>) {
   return {
@@ -81,7 +83,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       }
 
       const customRoles = body.customRoles ?? []
-      const emailSettings = body.emailSettings ?? defaultEmailSettings()
+      const emailSettings = (body.emailSettings ?? defaultEmailSettings()) as EmailSettings
       const onboarded = body.onboarded ?? false
 
       await sql`
@@ -89,9 +91,9 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
         VALUES (
           ${req.userId},
           ${role},
-          ${weights},
-          ${customRoles},
-          ${emailSettings},
+          ${sql.json(weights)},
+          ${sql.json(customRoles as unknown as JSONValue)},
+          ${sql.json(emailSettings as unknown as JSONValue)},
           ${onboarded},
           NOW()
         )
@@ -105,6 +107,15 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       `
 
       return res.status(200).json({ ok: true })
+    }
+
+    if (req.method === 'POST') {
+      const action = (req.query as Record<string, string>).action || ''
+      if (action === 'test-email') {
+        const result = await doSendTestEmail(req.userId)
+        return result.ok ? res.status(200).json(result) : res.status(500).json(result)
+      }
+      return res.status(400).json({ error: '未知操作' })
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

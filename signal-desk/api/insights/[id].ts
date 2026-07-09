@@ -1,9 +1,9 @@
 import type { VercelResponse } from '@vercel/node'
-import { withAuth, readJsonBody, type AuthenticatedRequest } from '../_lib/auth'
-import { sql } from '../_lib/db'
-import { parseJsonField } from '../_lib/jsonb'
-import { getRoleDefaultWeights, type InfoLabel, type IntelStatus } from '../_lib/types'
-import { mapIntelRow } from '../_lib/insights-mapper'
+import { withAuth, readJsonBody, type AuthenticatedRequest } from '../_lib/auth.js'
+import { sql } from '../_lib/db.js'
+import { parseJsonField } from '../_lib/jsonb.js'
+import { getRoleDefaultWeights, type InfoLabel, type IntelStatus } from '../_lib/types.js'
+import { mapIntelRow } from '../_lib/insights-mapper.js'
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   const id = req.query.id as string | undefined

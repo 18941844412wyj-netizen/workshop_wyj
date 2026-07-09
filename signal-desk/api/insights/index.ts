@@ -1,9 +1,9 @@
 import type { VercelResponse } from '@vercel/node'
-import { withAuth, type AuthenticatedRequest } from '../_lib/auth'
-import { sql } from '../_lib/db'
-import { parseJsonField } from '../_lib/jsonb'
-import { getRoleDefaultWeights, type InfoLabel } from '../_lib/types'
-import { mapIntelRow, sortIntels } from '../_lib/insights-mapper'
+import { withAuth, type AuthenticatedRequest } from '../_lib/auth.js'
+import { sql } from '../_lib/db.js'
+import { parseJsonField } from '../_lib/jsonb.js'
+import { getRoleDefaultWeights, type InfoLabel } from '../_lib/types.js'
+import { mapIntelRow, sortIntels } from '../_lib/insights-mapper.js'
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' })
@@ -13,6 +13,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   const label = req.query.label as string | undefined
   const priority = req.query.priority as string | undefined
   const archiveFilter = (req.query.archiveFilter as string) || 'hide'
+  const noiseOnly = req.query.noise === 'only'
 
   const profileRows = await sql`SELECT weights FROM profiles WHERE user_id = ${req.userId} LIMIT 1`
   const weights = parseJsonField<Record<InfoLabel, number>>(
@@ -27,7 +28,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     JOIN targets t ON t.id = i.target_id
     LEFT JOIN feedback f ON f.intel_id = i.id AND f.user_id = ${req.userId}
     WHERE i.user_id = ${req.userId}
-      AND i.is_noise = false
+      AND i.is_noise = ${noiseOnly}
       AND i.analysis_status = 'success'
     ORDER BY i.created_at DESC
     LIMIT 200

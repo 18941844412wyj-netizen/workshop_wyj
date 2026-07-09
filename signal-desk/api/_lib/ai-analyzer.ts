@@ -1,8 +1,8 @@
 import OpenAI from 'openai'
 import { z } from 'zod'
 import { zodResponseFormat } from 'openai/helpers/zod'
-import type { ChangeCandidate } from './change-detector'
-import { BUILTIN_ROLES, INFO_LABELS, PRIORITIES, type InfoLabel, type Priority } from './types'
+import type { ChangeCandidate } from './change-detector.js'
+import { BUILTIN_ROLES, INFO_LABELS, PRIORITIES, type InfoLabel, type Priority } from './types.js'
 
 export const IntelSchema = z.object({
   isNoise: z.boolean(),
@@ -43,6 +43,8 @@ const IntelSchemaLoose = z.object({
 })
 
 const ActionAdviceSchemaLoose = z.object({
+  whatChanged: z.string().optional(),
+  whyItMatters: z.string().optional(),
   actionGeneral: z
     .object({ 销售: z.string().optional(), 产品: z.string().optional(), 营销: z.string().optional() })
     .optional(),
@@ -103,6 +105,11 @@ function coerceActionAdviceRaw(raw: unknown): z.infer<typeof ActionAdviceSchemaL
   if (!raw || typeof raw !== 'object') return {}
   const o = raw as Record<string, unknown>
   const result: z.infer<typeof ActionAdviceSchemaLoose> = {}
+
+  const whatChanged = coerceActionValue(o.whatChanged ?? o['变化内容'] ?? o.summary)
+  if (whatChanged) result.whatChanged = whatChanged
+  const whyItMatters = coerceActionValue(o.whyItMatters ?? o['战略意义'] ?? o.significance)
+  if (whyItMatters) result.whyItMatters = whyItMatters
 
   const ag = o.actionGeneral ?? o.general ?? o.actions
   if (ag && typeof ag === 'object' && !Array.isArray(ag)) {
@@ -218,33 +225,84 @@ function extractJson(text: string): unknown {
   throw new Error('LLM 返回内容无法解析为 JSON')
 }
 
+const DOMAIN_PERSONA =
+  '你是互联网 AIGC 视觉赛道（生图 / 生视频 / 创意 Agent）的资深市场竞争分析专家，' +
+  '常年研究 Midjourney、Stable Diffusion 生态、DALL·E、Ideogram、Recraft、Runway、Pika、可灵、即梦、Sora、Luma 等公司。' +
+  '你分析的素材都是这些公司公开发布在官网、定价页、更新日志、招聘页上的信息，属于正当的公开市场研究。' +
+  '你熟悉这条赛道的关键竞争维度：模型能力（分辨率 / 时长 / 一致性 / 可控性 / 出图速度）、' +
+  'credits 与订阅的商业化打法、工作流与 API / 插件生态、版权合规与商用授权、获客渠道与增长杠杆。' +
+  '你的读者是产品经理、市场负责人、创始人和投资人——他们要的是能立刻用于决策的判断，不是正确的废话。'
+
+const DEPTH_RULES =
+  '写作铁律：' +
+  '(1) 只基于提供的变化原文作答，禁止臆造事实；证据不足时直接写「信息不足，需补充：X」，不要用模糊表述凑数。' +
+  '(2) 严禁空话套话。禁止出现「可能影响策略」「需要关注」「建议评估影响」这类没有信息量的句子；' +
+  '每一句都必须落到具体的数字、机制、差异点或可验证的判断上。' +
+  '(3) 允许犀利、有立场、有取舍——可以明确点评这一步的商业意图、能力短板或高明 / 冒进之处。' +
+  '(4) 量化优先：涉及价格、credits、时长、分辨率等，务必还原「从 A 变到 B、幅度多少」，而不是只说「有变化」。' +
+  '(5) 站在 AIGC 视觉赛道的专业上下文里解读，而不是泛泛的「某互联网公司」。'
+
 const SYSTEM_PROMPT =
-  '你是竞品情报分析师。只能基于提供的原文变化作答，禁止臆造。' +
+  DOMAIN_PERSONA +
+  ' 你的任务：对一条竞品公开页面的变化做深度竞争分析解读。' +
   '六大标签：定价、功能、更新日志、招聘、营销活动、合规条款。' +
-  '纯样式/A-B摇摆/无实质文本变化应标记 isNoise=true。' +
-  '返回 JSON，字段：isNoise(boolean), noiseType(string|null), labels(string[]), priority(紧急|中等|低), ' +
+  '纯样式 / A-B 摇摆 / 无实质文本变化应标记 isNoise=true。' +
+  DEPTH_RULES +
+  ' 字段深度要求：' +
+  'whatChanged——用完整句子还原「改了什么」，包含变化前→变化后与量化幅度，不能只丢一个词或一个折扣码；' +
+  'whyItMatters——推断对方的动机、这一步指向的竞争意图、对赛道格局与「我方」的具体影响，以及时间窗口，2-4 句、有判断；' +
+  'title——一句话点出信号本质（≤100 字）。' +
+  ' 返回 JSON，字段：isNoise(boolean), noiseType(string|null), labels(string[]), priority(紧急|中等|低), ' +
   'title, whatChanged, whyItMatters, actionGeneral({销售,产品,营销}), ' +
   'actionPlan({产品经理,市场营销负责人,创业者·创始人,投资人}), sourceAnchor({before,after})。'
 
-const ACTION_SYSTEM_PROMPT =
-  '你是竞品情报顾问。基于已识别的页面变化，为不同职能角色输出具体、可执行且彼此不同的应对建议。' +
-  '只能使用提供的变化原文与摘要，禁止臆造。' +
-  '必须严格输出以下 JSON 结构，所有值为中文字符串（1-2句），不要嵌套对象或数组：' +
-  '{"actionGeneral":{"销售":"...","产品":"...","营销":"..."},"actionPlan":{"产品经理":"...","市场营销负责人":"...","创业者·创始人":"...","投资人":"..."}}'
+  const ACTION_SYSTEM_PROMPT =
+  DOMAIN_PERSONA +
+  ' 你的任务：基于已识别的竞品变化，为不同职能角色给出「读完就能动手」的应对建议。' +
+  DEPTH_RULES +
+  ' 建议要求：每个角色一条，彼此明显不同（针对该角色真正关心的杠杆），' +
+  '要具体到「做什么动作、盯哪个指标 / 参数、抢哪个时间窗口」，而不是「关注一下」「调整策略」。' +
+  'actionGeneral 面向销售 / 产品 / 营销三条职能主线；' +
+  'actionPlan 面向产品经理（功能与工作流取舍）、市场营销负责人（获客与投放口径）、' +
+  '创业者·创始人（战略与资源押注）、投资人（赛道信号与标的价值）。' +
+  ' 同时基于原文把「变化内容」与「战略意义」改写得更有深度：' +
+  'whatChanged 用完整句子还原变化前→变化后与量化幅度，不能只丢一个词或折扣码；' +
+  'whyItMatters 推断对方动机、竞争意图、对赛道格局与我方的具体影响及时间窗口（2-4 句、有判断）。' +
+  ' 必须严格输出以下 JSON 结构，所有值为中文字符串（可犀利、有取舍），不要嵌套对象或数组：' +
+  '{"whatChanged":"...","whyItMatters":"...","actionGeneral":{"销售":"...","产品":"...","营销":"..."},"actionPlan":{"产品经理":"...","市场营销负责人":"...","创业者·创始人":"...","投资人":"..."}}'
+
+const ActionEnrichSchema = z.object({
+  whatChanged: z.string().min(1),
+  whyItMatters: z.string().min(1),
+  actionGeneral: z.object({ 销售: z.string().min(1), 产品: z.string().min(1), 营销: z.string().min(1) }),
+  actionPlan: z.object({
+    '产品经理': z.string().min(1),
+    '市场营销负责人': z.string().min(1),
+    '创业者·创始人': z.string().min(1),
+    '投资人': z.string().min(1),
+  }),
+})
+
+interface EnrichedSignal {
+  whatChanged?: string
+  whyItMatters?: string
+  actions: Pick<IntelAnalysis, 'actionGeneral' | 'actionPlan'>
+}
 
 async function generateActionAdvice(
   candidate: ChangeCandidate,
   base: IntelBase,
-): Promise<Pick<IntelAnalysis, 'actionGeneral' | 'actionPlan'>> {
+): Promise<EnrichedSignal> {
   const openai = getOpenAI()
+  const model = process.env.LLM_MODEL || 'gpt-4o'
   const userContent = [
     `变化前：\n${candidate.before}`,
     `变化后：\n${candidate.after}`,
     `标签：${base.labels.join('、')}`,
     `优先级：${base.priority}`,
     `标题：${base.title}`,
-    `变化摘要：${base.whatChanged}`,
-    `战略意义：${base.whyItMatters}`,
+    `变化摘要（草稿，可改写得更有深度）：${base.whatChanged}`,
+    `战略意义（草稿，可改写得更有深度）：${base.whyItMatters}`,
   ].join('\n\n')
 
   const messages = [
@@ -252,9 +310,27 @@ async function generateActionAdvice(
     { role: 'user' as const, content: userContent },
   ]
 
+  // 首选 json_schema 严格结构化输出（网关下最稳定），失败再降级 json_object
+  try {
+    const completion = await openai.chat.completions.parse({
+      model,
+      messages,
+      response_format: zodResponseFormat(ActionEnrichSchema, 'action_enrich'),
+    })
+    const parsed = completion.choices[0]?.message?.parsed
+    if (parsed) {
+      const actions = normalizeActions(parsed)
+      if (hasDistinctActions(actions)) {
+        return { whatChanged: parsed.whatChanged, whyItMatters: parsed.whyItMatters, actions }
+      }
+    }
+  } catch {
+    /* strict schema 不支持时降级 json_object */
+  }
+
   for (let attempt = 0; attempt < 2; attempt++) {
     const completion = await openai.chat.completions.create({
-      model: process.env.LLM_MODEL || 'gpt-4o',
+      model,
       messages: attempt === 0
         ? messages
         : [
@@ -263,18 +339,29 @@ async function generateActionAdvice(
               role: 'user' as const,
               content:
                 userContent +
-                '\n\n上次输出格式不正确。请只返回 actionGeneral 与 actionPlan 两个对象，键名必须完全一致，值为中文字符串。',
+                '\n\n上次输出格式不正确。请只返回 whatChanged、whyItMatters、actionGeneral、actionPlan 四个字段，键名必须完全一致，值为中文字符串。',
             },
           ],
       response_format: { type: 'json_object' },
     })
     const content = completion.choices[0]?.message?.content
     if (!content) continue
-    const actions = normalizeActions(coerceActionAdviceRaw(extractJson(content)))
-    if (hasDistinctActions(actions)) return actions
+    const raw = coerceActionAdviceRaw(extractJson(content))
+    const actions = normalizeActions(raw)
+    if (hasDistinctActions(actions)) {
+      return { whatChanged: raw.whatChanged, whyItMatters: raw.whyItMatters, actions }
+    }
   }
 
   throw new Error('LLM 行动建议格式无效或缺少差异化内容')
+}
+
+/** 取更有深度的版本：LLM 改写显著更长且非空时采用，否则保留规则草稿 */
+function pickDeeper(draft: string, rewritten?: string): string {
+  const next = rewritten?.trim()
+  if (!next) return draft
+  if (next.length >= Math.max(draft.trim().length, 12)) return next
+  return draft
 }
 
 async function enrichWithActions(candidate: ChangeCandidate, base: IntelBase): Promise<IntelAnalysis> {
@@ -282,8 +369,13 @@ async function enrichWithActions(candidate: ChangeCandidate, base: IntelBase): P
     return completeIntel(base)
   }
   try {
-    const actions = await generateActionAdvice(candidate, base)
-    return completeIntel(base, actions)
+    const enriched = await generateActionAdvice(candidate, base)
+    const deepenedBase: IntelBase = {
+      ...base,
+      whatChanged: pickDeeper(base.whatChanged, enriched.whatChanged),
+      whyItMatters: pickDeeper(base.whyItMatters, enriched.whyItMatters),
+    }
+    return completeIntel(deepenedBase, enriched.actions)
   } catch (err) {
     console.warn('[ai-analyzer] generateActionAdvice failed:', err)
     return completeIntel(base)

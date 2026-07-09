@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import { SignJWT, jwtVerify } from 'jose'
-import { sql } from './db'
+import { sql } from './db.js'
 
 const COOKIE_NAME = 'token'
 const MAX_AGE = 60 * 60 * 24 * 7 // 7 days

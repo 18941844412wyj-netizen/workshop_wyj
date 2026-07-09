@@ -1,7 +1,7 @@
 import type { VercelResponse } from '@vercel/node'
-import { withAuth, readJsonBody, type AuthenticatedRequest } from '../_lib/auth'
-import { sql } from '../_lib/db'
-import { parseReferenceIntelIds } from '../_lib/chat-utils'
+import { withAuth, readJsonBody, type AuthenticatedRequest } from '../_lib/auth.js'
+import { sql } from '../_lib/db.js'
+import { parseReferenceIntelIds } from '../_lib/chat-utils.js'
 
 async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   const sessionId = req.query.id as string | undefined

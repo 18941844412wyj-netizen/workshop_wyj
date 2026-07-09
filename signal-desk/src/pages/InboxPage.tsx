@@ -6,7 +6,10 @@ import InboxList from '../components/InboxList'
 import InspectorPanel from '../components/InspectorPanel'
 import DeepChatPanel from '../components/DeepChatPanel'
 import type { Intel, FeedbackTag, FeedbackModule } from '../lib/types'
-import { fetchProfile } from '../lib/constants'
+import { fetchProfileCached } from '../lib/profile-cache'
+import { getCachedIntels, setCachedIntels } from '../lib/intels-cache'
+import { ROLE_DEFAULT_WEIGHTS, getRoleDefaultWeights, type InfoLabel } from '../lib/constants'
+import type { CustomRole } from '../lib/constants'
 
 type ListView = 'morning' | 'pool' | 'all'
 type ArchiveFilter = 'hide' | 'all' | 'only'
@@ -15,15 +18,20 @@ type InspectorTab = 'detail' | 'chat'
 export default function InboxPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [intels, setIntels] = useState<Intel[]>([])
-  const [loading, setLoading] = useState(true)
+  const [intels, setIntels] = useState<Intel[]>(() => getCachedIntels() ?? [])
+  const [loading, setLoading] = useState(() => getCachedIntels() === undefined)
   const [userEmail, setUserEmail] = useState('')
   const [currentRole, setCurrentRole] = useState('产品经理')
+  const [currentWeights, setCurrentWeights] = useState<Record<InfoLabel, number>>(
+    () => ({ ...ROLE_DEFAULT_WEIGHTS['产品经理'] })
+  )
+  const [customRoles, setCustomRoles] = useState<CustomRole[]>([])
   const [listView, setListView] = useState<ListView>('morning')
   const [filterTrack, setFilterTrack] = useState('')
   const [filterLabel, setFilterLabel] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('hide')
+  const [contentType, setContentType] = useState<'intel' | 'noise'>('intel')
   const [showFilters, setShowFilters] = useState(false)
   const [toastMsg, setToastMsg] = useState('')
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('detail')
@@ -34,32 +42,44 @@ export default function InboxPage() {
   const poolCount = intels.filter(i => i.inCorePool && i.status !== '归档').length
   const activeFilterCount = [filterTrack, filterLabel, filterPriority].filter(Boolean).length
     + (archiveFilter !== 'hide' ? 1 : 0)
+    + (contentType !== 'intel' ? 1 : 0)
 
   const buildQuery = useCallback(() => {
     const q = new URLSearchParams()
     q.set('view', listView)
     q.set('archiveFilter', archiveFilter)
+    if (contentType === 'noise') q.set('noise', 'only')
     if (filterTrack) q.set('track', filterTrack)
     if (filterLabel) q.set('label', filterLabel)
     if (filterPriority) q.set('priority', filterPriority)
     return q.toString()
-  }, [listView, archiveFilter, filterTrack, filterLabel, filterPriority])
+  }, [listView, archiveFilter, contentType, filterTrack, filterLabel, filterPriority])
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/insights?${buildQuery()}`, { credentials: 'include' })
-    if (res.ok) setIntels(await res.json())
+    if (res.ok) {
+      const list = await res.json()
+      setCachedIntels(list)
+      setIntels(list)
+    }
   }, [buildQuery])
 
   useEffect(() => {
-    fetchProfile().then(p => {
+    fetchProfileCached().then(p => {
       if (p?.email) setUserEmail(p.email)
       if (p?.role) setCurrentRole(p.role)
+      if (p?.weights) setCurrentWeights(p.weights)
+      if (p?.customRoles) setCustomRoles(p.customRoles)
     })
   }, [])
 
   useEffect(() => {
-    setLoading(true)
-    refresh().finally(() => setLoading(false))
+    if (getCachedIntels() !== undefined) {
+      refresh()
+    } else {
+      setLoading(true)
+      refresh().finally(() => setLoading(false))
+    }
   }, [refresh])
 
   useEffect(() => {
@@ -129,7 +149,17 @@ export default function InboxPage() {
             <span className="panel-meta">{intels.length} 条</span>
           </header>
 
-          <RoleSwitcher role={currentRole} onChange={(r: string) => { setCurrentRole(r); setToastMsg('角色已切换') }} />
+          <RoleSwitcher role={currentRole} onChange={(r: string) => {
+            setCurrentRole(r)
+            const builtinW = (ROLE_DEFAULT_WEIGHTS as Record<string, Record<InfoLabel, number>>)[r]
+            if (builtinW) {
+              setCurrentWeights({ ...builtinW })
+            } else {
+              const cr = customRoles.find(c => c.name === r)
+              setCurrentWeights(cr?.weights ?? getRoleDefaultWeights('产品经理'))
+            }
+            setToastMsg('角色已切换')
+          }} />
 
           <div className="filter-bar">
             <div className="view-tabs">
@@ -146,15 +176,26 @@ export default function InboxPage() {
             {showFilters && (
               <InboxFilterPanel
                 track={filterTrack} label={filterLabel} priority={filterPriority} archiveFilter={archiveFilter}
+                contentType={contentType}
                 onTrack={setFilterTrack} onLabel={setFilterLabel} onPriority={setFilterPriority}
-                onArchive={setArchiveFilter}
-                onReset={() => { setFilterTrack(''); setFilterLabel(''); setFilterPriority(''); setArchiveFilter('hide') }}
+                onArchive={setArchiveFilter} onContentType={setContentType}
+                onReset={() => { setFilterTrack(''); setFilterLabel(''); setFilterPriority(''); setArchiveFilter('hide'); setContentType('intel') }}
               />
             )}
           </div>
 
           <div className="inbox-list-scroll">
-            <InboxList intels={intels} loading={loading} selectedId={selectedId} listView={listView} onSelect={selectIntel} />
+            <InboxList
+              intels={intels}
+              loading={loading}
+              selectedId={selectedId}
+              listView={listView}
+              weights={currentWeights}
+              onSelect={selectIntel}
+              chatMode={inspectorTab === 'chat' && !!selectedIntel}
+              referencedIds={chatIntelIds}
+              onToggleRef={toggleChatIntel}
+            />
           </div>
         </section>
 

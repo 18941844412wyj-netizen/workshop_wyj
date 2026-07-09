@@ -1,8 +1,9 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
 import bcrypt from 'bcryptjs'
-import { sql } from '../_lib/db'
-import { readJsonBody, setAuthCookie, clearAuthCookie, signToken } from '../_lib/auth'
-import { DEFAULT_WEIGHTS, defaultEmailSettings } from '../_lib/types'
+import type { JSONValue } from 'postgres'
+import { sql } from '../_lib/db.js'
+import { readJsonBody, setAuthCookie, clearAuthCookie, signToken } from '../_lib/auth.js'
+import { DEFAULT_WEIGHTS, defaultEmailSettings } from '../_lib/types.js'
 
 async function handleLogin(req: VercelRequest, res: VercelResponse) {
   const { email, password } = readJsonBody<{ email?: string; password?: string }>(req)
@@ -41,7 +42,7 @@ async function handleRegister(req: VercelRequest, res: VercelResponse) {
   const user = users[0]
   await sql`
     INSERT INTO profiles (user_id, weights, email_settings, onboarded)
-    VALUES (${user.id}, ${DEFAULT_WEIGHTS}, ${defaultEmailSettings()}, false)
+    VALUES (${user.id}, ${sql.json(DEFAULT_WEIGHTS)}, ${sql.json(defaultEmailSettings() as unknown as JSONValue)}, false)
   `
   const token = await signToken({ userId: user.id as string, email: user.email as string })
   setAuthCookie(res, token)
