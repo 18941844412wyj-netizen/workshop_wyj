@@ -185,7 +185,17 @@ export default function InboxPage() {
           </div>
 
           <div className="inbox-list-scroll">
-            <InboxList intels={intels} loading={loading} selectedId={selectedId} listView={listView} weights={currentWeights} onSelect={selectIntel} />
+            <InboxList
+              intels={intels}
+              loading={loading}
+              selectedId={selectedId}
+              listView={listView}
+              weights={currentWeights}
+              onSelect={selectIntel}
+              chatMode={inspectorTab === 'chat' && !!selectedIntel}
+              referencedIds={chatIntelIds}
+              onToggleRef={toggleChatIntel}
+            />
           </div>
         </section>
 
