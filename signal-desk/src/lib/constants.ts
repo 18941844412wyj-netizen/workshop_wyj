@@ -89,6 +89,13 @@ export async function saveProfile(body: Partial<UserProfile> & { onboarded?: boo
   return { ok: true }
 }
 
+export async function sendTestEmail(): Promise<{ ok: boolean; error?: string; to?: string[] }> {
+  const res = await fetch('/api/email-test', { method: 'POST', credentials: 'include' })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: data.error || '发送失败' }
+  return { ok: true, to: data.to }
+}
+
 export async function logout(): Promise<void> {
   await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
   const { invalidateProfileCache } = await import('./profile-cache')

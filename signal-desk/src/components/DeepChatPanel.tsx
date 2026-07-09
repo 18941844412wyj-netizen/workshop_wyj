@@ -295,7 +295,7 @@ export default function DeepChatPanel({
                 引用 · {m.referenceIntelIds?.length ?? 0} 条 · {m.referenceLabel}
               </div>
             )}
-            <div className="chat-bubble">{m.content}</div>
+            <div className="chat-bubble">{m.content.trim() || '（无内容）'}</div>
             <div className={`chat-meta chat-meta-${m.role}`}>
               {m.role === 'user' ? '你' : '分析助手'}
               {formatMsgTime(m.timestamp) ? ` · ${formatMsgTime(m.timestamp)}` : ''}

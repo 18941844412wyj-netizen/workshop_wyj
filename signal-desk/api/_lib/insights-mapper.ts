@@ -45,6 +45,8 @@ export function mapIntelRow(
     sourceHtml: parseSourceAnchor(row.source_anchor),
     status: row.status as IntelStatus,
     matchScore: calcMatchScore(labels, priority, weights),
+    isNoise: row.is_noise === true,
+    noiseType: (row.noise_type as string | null) ?? null,
     createdAt: row.created_at,
     feedback: feedbackTags,
     feedbackModules,

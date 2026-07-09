@@ -24,6 +24,7 @@ export default function InboxPage() {
   const [filterLabel, setFilterLabel] = useState('')
   const [filterPriority, setFilterPriority] = useState('')
   const [archiveFilter, setArchiveFilter] = useState<ArchiveFilter>('hide')
+  const [contentType, setContentType] = useState<'intel' | 'noise'>('intel')
   const [showFilters, setShowFilters] = useState(false)
   const [toastMsg, setToastMsg] = useState('')
   const [inspectorTab, setInspectorTab] = useState<InspectorTab>('detail')
@@ -34,16 +35,18 @@ export default function InboxPage() {
   const poolCount = intels.filter(i => i.inCorePool && i.status !== '归档').length
   const activeFilterCount = [filterTrack, filterLabel, filterPriority].filter(Boolean).length
     + (archiveFilter !== 'hide' ? 1 : 0)
+    + (contentType !== 'intel' ? 1 : 0)
 
   const buildQuery = useCallback(() => {
     const q = new URLSearchParams()
     q.set('view', listView)
     q.set('archiveFilter', archiveFilter)
+    if (contentType === 'noise') q.set('noise', 'only')
     if (filterTrack) q.set('track', filterTrack)
     if (filterLabel) q.set('label', filterLabel)
     if (filterPriority) q.set('priority', filterPriority)
     return q.toString()
-  }, [listView, archiveFilter, filterTrack, filterLabel, filterPriority])
+  }, [listView, archiveFilter, contentType, filterTrack, filterLabel, filterPriority])
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/insights?${buildQuery()}`, { credentials: 'include' })
@@ -146,9 +149,10 @@ export default function InboxPage() {
             {showFilters && (
               <InboxFilterPanel
                 track={filterTrack} label={filterLabel} priority={filterPriority} archiveFilter={archiveFilter}
+                contentType={contentType}
                 onTrack={setFilterTrack} onLabel={setFilterLabel} onPriority={setFilterPriority}
-                onArchive={setArchiveFilter}
-                onReset={() => { setFilterTrack(''); setFilterLabel(''); setFilterPriority(''); setArchiveFilter('hide') }}
+                onArchive={setArchiveFilter} onContentType={setContentType}
+                onReset={() => { setFilterTrack(''); setFilterLabel(''); setFilterPriority(''); setArchiveFilter('hide'); setContentType('intel') }}
               />
             )}
           </div>

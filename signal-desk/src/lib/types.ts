@@ -20,6 +20,8 @@ export interface Intel {
   sourceHtml: { before: string; after: string }
   status: IntelStatus
   matchScore: number
+  isNoise?: boolean
+  noiseType?: string | null
   createdAt: string
   feedback: FeedbackTag[]
   feedbackModules: FeedbackModule[]

@@ -23,6 +23,8 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   return res.status(200).json({
     ok: true,
     intelIds: result.intelIds,
+    generated: result.generated,
+    noiseRecorded: result.noiseRecorded,
     ...(result.message ? { message: result.message } : {}),
   })
 }

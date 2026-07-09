@@ -43,6 +43,10 @@ export default function InboxList({ intels, loading, selectedId, listView, onSel
           <h3 className="intel-brief-title">{intel.title}</h3>
           <p className="intel-brief-excerpt">{intel.whatChanged.slice(0, 72)}…</p>
           <div className="intel-brief-tags">
+            {intel.isNoise && (
+              <span className="tag tag-noise" title="badcase / 噪音记录">噪音{intel.noiseType ? `·${intel.noiseType}` : ''}</span>
+            )}
+            <span className="tag tag-target" title="监控目标">{intel.targetName}</span>
             <span className="tag tag-track">{intel.track}</span>
             {intel.labels.map(l => <span key={l} className="tag">{l}</span>)}
           </div>

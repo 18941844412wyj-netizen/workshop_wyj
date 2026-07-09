@@ -54,17 +54,26 @@ interface FilterPanelProps {
   label: string
   priority: string
   archiveFilter: 'hide' | 'all' | 'only'
+  contentType: 'intel' | 'noise'
   onTrack: (v: string) => void
   onLabel: (v: string) => void
   onPriority: (v: string) => void
   onArchive: (v: 'hide' | 'all' | 'only') => void
+  onContentType: (v: 'intel' | 'noise') => void
   onReset: () => void
 }
 
 export function InboxFilterPanel(props: FilterPanelProps) {
-  const { track, label, priority, archiveFilter, onTrack, onLabel, onPriority, onArchive, onReset } = props
+  const { track, label, priority, archiveFilter, contentType, onTrack, onLabel, onPriority, onArchive, onContentType, onReset } = props
   return (
     <div className="filter-panel">
+      <div className="filter-panel-row">
+        <label>内容类型</label>
+        <select value={contentType} onChange={e => onContentType(e.target.value as 'intel' | 'noise')}>
+          <option value="intel">有效情报</option>
+          <option value="noise">噪音记录 (badcase)</option>
+        </select>
+      </div>
       <div className="filter-panel-row">
         <label>赛道</label>
         <select value={track} onChange={e => onTrack(e.target.value)}>
