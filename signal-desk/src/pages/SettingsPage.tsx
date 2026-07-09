@@ -97,8 +97,8 @@ export default function SettingsPage() {
     setTesting(true)
     try {
       const res = await sendTestEmail()
-      if (res.ok) setToast(`测试邮件已发送至 ${(res.to ?? []).join('、') || '收件邮箱'}，请查收`)
-      else setBanner(res.error || '测试邮件发送失败')
+      if (res.ok) setToast(`今日情报已发送至 ${(res.to ?? []).join('、') || '收件邮箱'}，请查收`)
+      else setBanner(res.error || '发送失败')
     } finally {
       setTesting(false)
     }
@@ -283,13 +283,13 @@ export default function SettingsPage() {
               </div>
 
               <div className="field">
-                <label>验证配置</label>
+                <label>立即发送情报</label>
                 <button type="button" className="btn btn-secondary btn-sm" onClick={handleTestEmail}
                   disabled={testing || !email.enabled}>
-                  {testing ? '发送中…' : '发送测试邮件'}
+                  {testing ? '发送中…' : '发送今日情报'}
                 </button>
                 <p className="settings-section-desc mt-8">
-                  向收件邮箱发送一封样例邮件，验证 SMTP 是否配置成功（无需先保存）。
+                  立即将今日真实情报（过去 25 小时内，按优先级排序）发送至收件邮箱。
                 </p>
               </div>
             </>

@@ -213,9 +213,12 @@ export async function sendDailyDigest(userId: string): Promise<DigestResult> {
   return { ok: true, skipped: false, count: intels.length }
 }
 
-/** 发送一封样例邮件，用于验证 SMTP 配置是否可用。收件人取设置里的邮箱，无则取账号邮箱。 */
+/**
+ * 立即发送今日真实情报（按优先级排序，最多 10 条）。
+ * 若当日暂无情报则发一封空摘要提示。收件人取设置里的邮箱，无则取账号邮箱。
+ */
 export async function sendTestEmail(userId: string): Promise<{ ok: boolean; error?: string; to?: string[] }> {
-  if (!isSmtpConfigured()) return { ok: false, error: 'SMTP 未配置，请先在 .env.local 填入 SMTP_HOST/SMTP_USER/SMTP_PASS' }
+  if (!isSmtpConfigured()) return { ok: false, error: 'SMTP 未配置，请先填入 SMTP_HOST/SMTP_USER/SMTP_PASS' }
 
   const settings = await loadSettings(userId)
   let recipients = getRecipients(settings)
@@ -226,18 +229,46 @@ export async function sendTestEmail(userId: string): Promise<{ ok: boolean; erro
   }
   if (recipients.length === 0) return { ok: false, error: '没有可用的收件邮箱' }
 
-  const sample: IntelEmailRow = {
-    id: 'test',
-    title: '这是一封 Signal Desk 测试邮件',
-    what_changed: '若你收到本邮件，说明 SMTP 邮件推送已配置成功，可以正常接收竞品情报了。',
-    why_it_matters: '测试邮件用于验证发件账号、授权码与收件地址是否正确。',
-    action_general: { 销售: '（示例）无需行动', 产品: '（示例）无需行动', 营销: '（示例）无需行动' },
-    priority: '中等',
+  const appUrl = getAppUrl()
+
+  // 查询今日真实情报（25 小时内，非噪音，按优先级排序，最多 10 条）
+  const rows = await sql`
+    SELECT id, title, what_changed, why_it_matters, action_general, priority
+    FROM intels
+    WHERE user_id = ${userId}
+      AND is_noise = false
+      AND analysis_status = 'success'
+      AND created_at >= NOW() - INTERVAL '25 hours'
+    ORDER BY
+      CASE priority WHEN '紧急' THEN 0 WHEN '中等' THEN 1 ELSE 2 END,
+      created_at DESC
+    LIMIT 10
+  `
+
+  if (rows.length === 0) {
+    // 暂无情报时发提示邮件
+    const { ok, error } = await sendMail({
+      to: recipients,
+      subject: '【Signal Desk】今日暂无新情报',
+      html: wrapEmail(
+        '今日情报摘要',
+        `<p style="color:#344054;margin:0">今日（过去 25 小时内）暂无新的竞品情报，SMTP 配置已验证正常。</p>`,
+      ),
+    })
+    return { ok, error, to: recipients }
   }
+
+  const intels = rows as unknown as IntelEmailRow[]
+  const urgentCount = intels.filter(i => i.priority === '紧急').length
+  const heading = urgentCount > 0
+    ? `今日紧急情报 · ${urgentCount} 条紧急 / 共 ${intels.length} 条`
+    : `今日情报摘要 · 共 ${intels.length} 条`
+
+  const body = intels.map(i => buildIntelBlock(i, settings, appUrl)).join('\n')
   const { ok, error } = await sendMail({
     to: recipients,
-    subject: '【Signal Desk】邮件推送测试',
-    html: wrapEmail('这是一封配置验证邮件', buildIntelBlock(sample, defaultEmailSettings(), getAppUrl())),
+    subject: `【Signal Desk】今日情报 · ${intels.length} 条${urgentCount > 0 ? `（${urgentCount} 条紧急）` : ''}`,
+    html: wrapEmail(heading, body),
   })
   return { ok, error, to: recipients }
 }
