@@ -32,6 +32,23 @@ export function getRoleDefaultWeights(role: Role): Record<InfoLabel, number> {
   return { ...ROLE_DEFAULT_WEIGHTS['产品经理'] }
 }
 
+/**
+ * 根据当前角色权重重新计算有效优先级：
+ * 若用户对该标签权重 ≥ 4 → 视为紧急；≥ 3 → 中等；其余取 AI 判定。
+ * 取"权重优先级"与"AI 优先级"中较高者。
+ */
+export function getEffectivePriority(
+  labels: InfoLabel[],
+  aiPriority: Priority,
+  weights: Record<InfoLabel, number>,
+): Priority {
+  if (labels.length === 0) return aiPriority
+  const maxWeight = labels.reduce((max, label) => Math.max(max, weights[label] ?? 1), 0)
+  const weightPriority: Priority = maxWeight >= 4 ? '紧急' : maxWeight >= 3 ? '中等' : '低'
+  const rank = (p: Priority) => (p === '紧急' ? 3 : p === '中等' ? 2 : 1)
+  return rank(aiPriority) >= rank(weightPriority) ? aiPriority : weightPriority
+}
+
 export interface CustomRole {
   name: string
   weights: Record<InfoLabel, number>
@@ -90,7 +107,7 @@ export async function saveProfile(body: Partial<UserProfile> & { onboarded?: boo
 }
 
 export async function sendTestEmail(): Promise<{ ok: boolean; error?: string; to?: string[] }> {
-  const res = await fetch('/api/email-test', { method: 'POST', credentials: 'include' })
+  const res = await fetch('/api/profile?action=test-email', { method: 'POST', credentials: 'include' })
   const data = await res.json().catch(() => ({}))
   if (!res.ok) return { ok: false, error: data.error || '发送失败' }
   return { ok: true, to: data.to }

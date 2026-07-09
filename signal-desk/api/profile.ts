@@ -13,6 +13,7 @@ import {
   type InfoLabel,
   type Role,
 } from './_lib/types.js'
+import { sendTestEmail as doSendTestEmail } from './_lib/notifier.js'
 
 function serializeProfile(p: Record<string, unknown>) {
   return {
@@ -106,6 +107,15 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       `
 
       return res.status(200).json({ ok: true })
+    }
+
+    if (req.method === 'POST') {
+      const action = (req.query as Record<string, string>).action || ''
+      if (action === 'test-email') {
+        const result = await doSendTestEmail(req.userId)
+        return result.ok ? res.status(200).json(result) : res.status(500).json(result)
+      }
+      return res.status(400).json({ error: '未知操作' })
     }
 
     return res.status(405).json({ error: 'Method not allowed' })

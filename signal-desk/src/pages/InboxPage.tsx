@@ -8,6 +8,8 @@ import DeepChatPanel from '../components/DeepChatPanel'
 import type { Intel, FeedbackTag, FeedbackModule } from '../lib/types'
 import { fetchProfileCached } from '../lib/profile-cache'
 import { getCachedIntels, setCachedIntels } from '../lib/intels-cache'
+import { ROLE_DEFAULT_WEIGHTS, getRoleDefaultWeights, type InfoLabel } from '../lib/constants'
+import type { CustomRole } from '../lib/constants'
 
 type ListView = 'morning' | 'pool' | 'all'
 type ArchiveFilter = 'hide' | 'all' | 'only'
@@ -20,6 +22,10 @@ export default function InboxPage() {
   const [loading, setLoading] = useState(() => getCachedIntels() === undefined)
   const [userEmail, setUserEmail] = useState('')
   const [currentRole, setCurrentRole] = useState('产品经理')
+  const [currentWeights, setCurrentWeights] = useState<Record<InfoLabel, number>>(
+    () => ({ ...ROLE_DEFAULT_WEIGHTS['产品经理'] })
+  )
+  const [customRoles, setCustomRoles] = useState<CustomRole[]>([])
   const [listView, setListView] = useState<ListView>('morning')
   const [filterTrack, setFilterTrack] = useState('')
   const [filterLabel, setFilterLabel] = useState('')
@@ -62,6 +68,8 @@ export default function InboxPage() {
     fetchProfileCached().then(p => {
       if (p?.email) setUserEmail(p.email)
       if (p?.role) setCurrentRole(p.role)
+      if (p?.weights) setCurrentWeights(p.weights)
+      if (p?.customRoles) setCustomRoles(p.customRoles)
     })
   }, [])
 
@@ -141,7 +149,17 @@ export default function InboxPage() {
             <span className="panel-meta">{intels.length} 条</span>
           </header>
 
-          <RoleSwitcher role={currentRole} onChange={(r: string) => { setCurrentRole(r); setToastMsg('角色已切换') }} />
+          <RoleSwitcher role={currentRole} onChange={(r: string) => {
+            setCurrentRole(r)
+            const builtinW = (ROLE_DEFAULT_WEIGHTS as Record<string, Record<InfoLabel, number>>)[r]
+            if (builtinW) {
+              setCurrentWeights({ ...builtinW })
+            } else {
+              const cr = customRoles.find(c => c.name === r)
+              setCurrentWeights(cr?.weights ?? getRoleDefaultWeights('产品经理'))
+            }
+            setToastMsg('角色已切换')
+          }} />
 
           <div className="filter-bar">
             <div className="view-tabs">
@@ -167,7 +185,7 @@ export default function InboxPage() {
           </div>
 
           <div className="inbox-list-scroll">
-            <InboxList intels={intels} loading={loading} selectedId={selectedId} listView={listView} onSelect={selectIntel} />
+            <InboxList intels={intels} loading={loading} selectedId={selectedId} listView={listView} weights={currentWeights} onSelect={selectIntel} />
           </div>
         </section>
 
