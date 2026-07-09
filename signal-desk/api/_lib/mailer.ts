@@ -24,9 +24,9 @@ export function isMailConfigured(): boolean {
 // ─── 发件人 ──────────────────────────────────────────────────────────────────
 
 function getFromAddress(): string {
-  // Resend 模式：优先用 RESEND_FROM，否则用 onboarding@resend.dev（测试域名）
+  // Resend 模式：优先用 RESEND_FROM，否则用 Resend 官方测试地址（纯地址格式）
   if (isResendConfigured()) {
-    return process.env.RESEND_FROM || 'Signal Desk <onboarding@resend.dev>'
+    return process.env.RESEND_FROM || 'onboarding@resend.dev'
   }
   const addr = process.env.SMTP_FROM || process.env.SMTP_USER || ''
   const name = process.env.SMTP_FROM_NAME || 'Signal Desk'
