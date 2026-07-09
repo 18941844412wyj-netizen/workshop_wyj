@@ -1,4 +1,4 @@
-import { serve } from 'inngest/vercel'
+import { serve } from 'inngest/node'
 import { inngest } from './_lib/inngest-client.js'
 import { detectPageChanges, sendHourlyDigest } from './_lib/inngest-functions.js'
 

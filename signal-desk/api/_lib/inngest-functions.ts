@@ -5,15 +5,15 @@ import { sendDailyDigest, PUSH_TIME_HOURS } from './notifier.js'
 
 /**
  * 每 5 分钟扫描所有 scheduled 目标，检测页面变化并生成情报。
- * 使用 Inngest step 保证每个目标独立执行、失败可重试。
+ * Inngest v4 API：trigger 放在 options.triggers 数组里，handler 是第 2 个参数。
  */
 export const detectPageChanges = inngest.createFunction(
   {
     id: 'detect-page-changes',
     name: '页面变化检测（每 5 分钟）',
+    triggers: [{ cron: '*/5 * * * *' }],
     concurrency: { limit: 1 },
   },
-  { cron: '*/5 * * * *' },
   async ({ step }) => {
     const targets = await step.run('fetch-scheduled-targets', async () => {
       return sql<{ id: string; user_id: string }[]>`
@@ -41,9 +41,9 @@ export const sendHourlyDigest = inngest.createFunction(
   {
     id: 'send-hourly-digest',
     name: '日报摘要推送（每小时）',
+    triggers: [{ cron: '0 * * * *' }],
     concurrency: { limit: 1 },
   },
-  { cron: '0 * * * *' },
   async ({ step }) => {
     const beijingHour = await step.run('get-beijing-hour', async () => {
       return (new Date().getUTCHours() + 8) % 24
