@@ -4,8 +4,10 @@ import {
   BUILTIN_ROLES,
   defaultEmailSettings,
   fetchProfile,
+  generateApiKey,
   getAllRoles,
   getRoleDefaultWeights,
+  revokeApiKey,
   saveProfile,
   sendTestEmail,
   type CustomRole,
@@ -16,7 +18,7 @@ import {
 import { Layout, Toast } from '../components/Layout'
 import { WeightModal } from '../components/inbox-ui'
 
-type Tab = 'role' | 'email'
+type Tab = 'role' | 'email' | 'api'
 
 function buildWeightsMap(role: Role | null, weights: Record<InfoLabel, number>, customRoles: CustomRole[]) {
   const map: Record<string, Record<InfoLabel, number>> = {}
@@ -44,6 +46,9 @@ export default function SettingsPage() {
   const [weightModalRole, setWeightModalRole] = useState<Role | null>(null)
   const [editWeights, setEditWeights] = useState<Record<InfoLabel, number>>(getRoleDefaultWeights('产品经理'))
   const [weightError, setWeightError] = useState('')
+  const [apiKey, setApiKey] = useState<string | null>(null)
+  const [apiKeyGenerating, setApiKeyGenerating] = useState(false)
+  const [apiKeyCopied, setApiKeyCopied] = useState(false)
 
   useEffect(() => {
     fetchProfile().then(p => {
@@ -57,6 +62,7 @@ export default function SettingsPage() {
         ...es,
         recipientEmails: es.recipientEmails?.length ? [...es.recipientEmails] : [p.email ?? ''],
       })
+      setApiKey(p.apiKey ?? null)
     }).finally(() => setPageLoading(false))
   }, [])
 
@@ -90,6 +96,45 @@ export default function SettingsPage() {
     setNewRoleName('')
     setErrors({})
     setToast('自定义角色已添加，保存设置后生效')
+  }
+
+  const handleGenerateApiKey = async () => {
+    setApiKeyGenerating(true)
+    setBanner('')
+    try {
+      const res = await generateApiKey()
+      if (res.ok && res.apiKey) {
+        setApiKey(res.apiKey)
+        setToast('API Key 已生成')
+      } else {
+        setBanner(res.error || '生成失败')
+      }
+    } finally {
+      setApiKeyGenerating(false)
+    }
+  }
+
+  const handleRevokeApiKey = async () => {
+    if (!window.confirm('确认撤销 API Key？撤销后所有使用该 Key 的应用将立即失效。')) return
+    setBanner('')
+    try {
+      const res = await revokeApiKey()
+      if (res.ok) {
+        setApiKey(null)
+        setToast('API Key 已撤销')
+      } else {
+        setBanner(res.error || '撤销失败')
+      }
+    } catch {
+      setBanner('撤销失败，请重试')
+    }
+  }
+
+  const handleCopyApiKey = async () => {
+    if (!apiKey) return
+    await navigator.clipboard.writeText(apiKey)
+    setApiKeyCopied(true)
+    setTimeout(() => setApiKeyCopied(false), 2000)
   }
 
   const handleTestEmail = async () => {
@@ -174,6 +219,7 @@ export default function SettingsPage() {
         <div className="settings-tabs view-tabs">
           <button className={'view-tab' + (tab === 'role' ? ' active' : '')} onClick={() => setTab('role')}>角色与权重</button>
           <button className={'view-tab' + (tab === 'email' ? ' active' : '')} onClick={() => setTab('email')}>邮件通知</button>
+          <button className={'view-tab' + (tab === 'api' ? ' active' : '')} onClick={() => setTab('api')}>API 访问</button>
         </div>
 
         <div className="settings-card">
@@ -295,11 +341,62 @@ export default function SettingsPage() {
             </>
           )}
 
+          {tab === 'api' && (
+            <>
+              <h3 className="settings-section-title">API 访问</h3>
+              <p className="settings-section-desc mb-20">
+                使用 API Key 从外部系统读取你的竞品情报数据。API Key 仅显示一次，请妥善保存。
+              </p>
+
+              {apiKey ? (
+                <div className="field">
+                  <label>当前 API Key</label>
+                  <div className="api-key-row">
+                    <code className="api-key-display">{apiKey}</code>
+                    <button type="button" className="btn btn-secondary btn-sm" onClick={handleCopyApiKey}>
+                      {apiKeyCopied ? '已复制 ✓' : '复制'}
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={handleRevokeApiKey}>撤销</button>
+                  </div>
+                  <p className="settings-section-desc mt-8">
+                    调用示例：<code style={{fontSize:'12px', background:'var(--bg-card)', padding:'2px 6px', borderRadius:'4px', userSelect:'all'}}>
+                      curl "https://signal-desk-sepia.vercel.app/api/v1/changes?format=digest" -H "Authorization: Bearer {apiKey}"
+                    </code>
+                  </p>
+                </div>
+              ) : (
+                <div className="field">
+                  <label>尚未生成 API Key</label>
+                  <button type="button" className="btn btn-primary btn-sm" onClick={handleGenerateApiKey} disabled={apiKeyGenerating}>
+                    {apiKeyGenerating ? '生成中…' : '生成 API Key'}
+                  </button>
+                  <p className="settings-section-desc mt-8">
+                    生成后可通过 <code>Authorization: Bearer &lt;key&gt;</code> 调用情报 API。
+                  </p>
+                </div>
+              )}
+
+              <div className="field mt-20">
+                <label>接口地址</label>
+                <div style={{display:'flex', flexDirection:'column', gap:'6px'}}>
+                  <code className="api-key-display" style={{fontSize:'12px'}}>
+                    GET https://signal-desk-sepia.vercel.app/api/v1/changes?format=digest
+                  </code>
+                  <p className="settings-section-desc">
+                    返回：[&#123; competitor, change&#123;summary, before, after&#125;, intent[&#123;role, action&#125;] &#125;]
+                  </p>
+                </div>
+              </div>
+            </>
+          )}
+
           <div className="settings-footer">
             <button className="btn btn-secondary" onClick={() => navigate('/inbox')}>返回</button>
-            <button className="btn btn-primary" onClick={saveCurrent} disabled={loading}>
-              {loading ? '保存中…' : '保存设置'}
-            </button>
+            {tab !== 'api' && (
+              <button className="btn btn-primary" onClick={saveCurrent} disabled={loading}>
+                {loading ? '保存中…' : '保存设置'}
+              </button>
+            )}
           </div>
         </div>
       </div>

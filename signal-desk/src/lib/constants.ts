@@ -84,6 +84,7 @@ export interface UserProfile {
   customRoles: CustomRole[]
   emailSettings: EmailSettings
   onboarded: boolean
+  apiKey?: string | null
 }
 
 export async function fetchProfile(): Promise<UserProfile | null> {
@@ -111,6 +112,20 @@ export async function sendTestEmail(): Promise<{ ok: boolean; error?: string; to
   const data = await res.json().catch(() => ({}))
   if (!res.ok) return { ok: false, error: data.error || '发送失败' }
   return { ok: true, to: data.to }
+}
+
+export async function generateApiKey(): Promise<{ ok: boolean; apiKey?: string; error?: string }> {
+  const res = await fetch('/api/profile?action=generate-api-key', { method: 'POST', credentials: 'include' })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: data.error || '生成失败' }
+  return { ok: true, apiKey: data.apiKey }
+}
+
+export async function revokeApiKey(): Promise<{ ok: boolean; error?: string }> {
+  const res = await fetch('/api/profile?action=revoke-api-key', { method: 'POST', credentials: 'include' })
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) return { ok: false, error: data.error || '撤销失败' }
+  return { ok: true }
 }
 
 export async function logout(): Promise<void> {

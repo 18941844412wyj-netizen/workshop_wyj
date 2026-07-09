@@ -527,6 +527,19 @@ label { font-size: 13px; font-weight: 500; color: var(--ink-muted); margin-botto
   border-top: 1px solid var(--border-light);
 }
 
+.api-key-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.api-key-display {
+  flex: 1; min-width: 0;
+  display: block; padding: 8px 12px;
+  background: var(--bg-card, #f5f3ef); border: 1px solid var(--border-light);
+  border-radius: var(--radius-md, 6px);
+  font-family: var(--font-mono); font-size: 13px;
+  color: var(--ink); word-break: break-all; user-select: all;
+}
+
 /* Table */
 .table-wrap { background: var(--panel); border: 1px solid var(--border-light); border-radius: var(--radius-lg); overflow-x: auto; box-shadow: var(--shadow); }
 table { width: 100%; border-collapse: collapse; font-size: 14px; min-width: 640px; }
