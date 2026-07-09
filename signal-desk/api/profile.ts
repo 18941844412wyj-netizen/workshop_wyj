@@ -25,6 +25,7 @@ function serializeProfile(p: Record<string, unknown>) {
     customRoles: parseJsonField<CustomRole[]>(p.custom_roles, []),
     emailSettings: parseJsonField<EmailSettings>(p.email_settings, defaultEmailSettings()),
     onboarded: Boolean(p.onboarded),
+    apiKey: (p.api_key as string | null) ?? null,
   }
 }
 
@@ -41,7 +42,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   try {
     if (req.method === 'GET') {
       const rows = await sql`
-        SELECT p.role, p.weights, p.custom_roles, p.email_settings, p.onboarded, u.email
+        SELECT p.role, p.weights, p.custom_roles, p.email_settings, p.onboarded, u.email, u.api_key
         FROM profiles p
         JOIN users u ON u.id = p.user_id
         WHERE p.user_id = ${req.userId} LIMIT 1
@@ -54,6 +55,7 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
           customRoles: [],
           emailSettings: defaultEmailSettings(),
           onboarded: false,
+          apiKey: null,
         })
       }
       const p = rows[0] as Record<string, unknown>
@@ -111,10 +113,28 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
 
     if (req.method === 'POST') {
       const action = (req.query as Record<string, string>).action || ''
+
       if (action === 'test-email') {
         const result = await doSendTestEmail(req.userId)
         return result.ok ? res.status(200).json(result) : res.status(500).json(result)
       }
+
+      if (action === 'generate-api-key') {
+        // 生成 32 字节随机 API Key（前缀 sk_ 方便识别）
+        const raw = Array.from(
+          { length: 32 },
+          () => Math.random().toString(36)[2] ?? 'x',
+        ).join('')
+        const apiKey = `sk_${raw}`
+        await sql`UPDATE users SET api_key = ${apiKey} WHERE id = ${req.userId}`
+        return res.status(200).json({ apiKey })
+      }
+
+      if (action === 'revoke-api-key') {
+        await sql`UPDATE users SET api_key = NULL WHERE id = ${req.userId}`
+        return res.status(200).json({ ok: true })
+      }
+
       return res.status(400).json({ error: '未知操作' })
     }
 

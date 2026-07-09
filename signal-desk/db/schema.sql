@@ -6,8 +6,10 @@ CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT UNIQUE NOT NULL,
   password_hash TEXT NOT NULL,
+  api_key TEXT UNIQUE,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key) WHERE api_key IS NOT NULL;
 
 -- profiles（角色+权重+自定义角色+通知偏好）
 CREATE TABLE IF NOT EXISTS profiles (

@@ -80,7 +80,7 @@ API 内部组件（职责 / 关键接口 / 依赖）：
 - **Targets**：竞品 CRUD（名称/URL/赛道/采集方式：`manual`|`scheduled`+schedule）。依赖 DB。
 - **Collector**：按 URL 抓取 → 提取正文为 markdown（markdown<3 行触发 JS 注入/渲染降级再抓）→ 抽取可见文本 → 存快照；对比对象为库中上一快照。本期默认输入为测试包 HTML，真实站点抓取可行性见 R-010。依赖 DB + 采集目标站点（本期测试包）。
 - **ChangeDetector（去噪第 1 层）**：抽取可见文本（剥离 style/script/注释/属性）→ 空白归一化 → 区块/行 diff → 输出「变化候选」；天然过滤纯 CSS 噪音。
-- **AIAnalyzer（去噪第 2 层）**：对候选调用 LLM（strict json_schema + Zod 校验）产出 `labels[]/priority/whatChanged/whyItMatters/actionGeneral/actionPlan/sourceAnchor/isNoise/noiseType`；`isNoise=true`（A/B 摇摆、幻觉诱饵、未上线）不生成情报。处理 refusal/截断→标记分析失败可重试。依赖 LLM。
+- **AIAnalyzer（去噪第 2 层）**：两阶段分析架构——**阶段 1**：关键词规则快速判噪（`patternNoiseBase`）与识别信号类型（`patternSignalBase`），输出轻量 `IntelBase`（不含行动建议）；**阶段 2**：调用 LLM（`generateActionAdvice`，专门的 `ACTION_SYSTEM_PROMPT`）生成差异化行动建议并改写 `whatChanged/whyItMatters` 深度。若关键词规则未命中，直接调用全量 LLM（`zodResponseFormat` strict，失败降级 `json_object`）。系统 Prompt 含 **AIGC 赛道专家人设**（Midjourney/Runway/可灵等竞品上下文）和**深度写作规范**（禁空话/量化优先/有立场）。噪音类型固定 4 种中文枚举：营销数字诱饵/日期变更/排版样式调整/A-B摇摆；`isNoise=true` 不生成情报。LLM 失败时降级规则兜底，不产出半成品。依赖 LLM。
 - **Matcher**：按用户角色 + 权重对情报打分排序（复用 Demo 打分：Σ标签权重 + 优先级加成），低权重降权保留不隐藏。
 - **Insights**：情报列表（晨报/核心池/全部 + 筛选 + 角色快切）、详情、状态（未读/已读/归档）、核心池标记。依赖 DB。
 - **Chat**：引用式多轮对话；grounded prompt 限定「当前情报 + 被引用原文 + 会话上下文」；多会话管理，历史持续落盘至终止。依赖 LLM + DB。
@@ -111,18 +111,25 @@ API 内部组件（职责 / 关键接口 / 依赖）：
 
 ### 3.5 对外承诺要点（要点 + 追溯，不写字段/DDL）
 
-- API（Serverless，REST）契约要点（对齐 `prd.md#9` / `prototype.md#3`）：
+- API（Serverless，REST）契约要点（对齐 `prd.md#9` / `prototype.md#3`；已按实际实现更新）：
   - `POST /api/auth/register`、`POST /api/auth/login`、`POST /api/auth/logout`
-  - `GET/PUT /api/profile`（角色+权重+通知偏好+自定义角色）
+  - `GET/PUT /api/profile`（角色+权重+通知偏好+自定义角色+**apiKey** 字段）
+  - **`POST /api/profile?action=generate-api-key`**（生成 API Key，前缀 `sk_`，32 字节随机）
+  - **`POST /api/profile?action=revoke-api-key`**（撤销 API Key）
+  - **`POST /api/profile?action=test-email`**（发送今日情报测试邮件）
   - `GET/POST /api/targets`、`PUT/DELETE /api/targets/:id`
+  - **`GET /api/targets/:id?stats=true`**（返回该目标情报统计：total/valuable/noise/noiseTypes）
   - `POST /api/analyze`（手动即时触发）、`GET /api/cron/analyze`（每日定时，`CRON_SECRET` 保护）
   - `GET /api/insights`（按画像个性化排序）、`GET /api/insights/:id`、`PATCH /api/insights/:id`（已读/归档/核心池）
-  - `POST /api/insights/:id/chat`（引用式多轮）、`POST /api/insights/:id/feedback`
+  - **`POST /api/insights/:id/chat`**（引用式多轮对话，与 feedback 合并在 `insights/[id]/[action].ts`）
+  - **`POST /api/insights/:id/feedback`**（情报反馈，与 chat 合并在 `insights/[id]/[action].ts`）
   - `POST /api/notify`（Resend 推送，供 Cron/分析后调用）
+- **采集方式枚举**（已实现）：`manual`（手动即时触发）| `scheduled`（固定时间每日定时）| **`auto`**（每1分钟自动采集）
 - 权限：仅「已登录」门槛；`/api/cron/*` 用 `CRON_SECRET` 保护。无细粒度权限。
-- 数据口径：优先级三档（紧急>中等>低）；六大信息标签固定枚举；情报须命中 ≥1 标签。
+- 数据口径：优先级三档（紧急>中等>低）；六大信息标签固定枚举；情报须命中 ≥1 标签；**噪音类型 4 种枚举**（中文）：营销数字诱饵 / 日期变更 / 排版样式调整 / A-B摇摆。
+- **Serverless 函数合并**：`insights/[id]/chat.ts` + `insights/[id]/feedback.ts` 已合并为 `insights/[id]/[action].ts`（节省 Vercel Hobby 12 个函数配额）；通过 query param `action=chat|feedback` 路由。
 - 兼容性：`/inbox/:id`→`?id=:id&view=detail`、`/chat`→`?view=chat` 兼容重定向。
-- 迁移与回滚：greenfield 无数据迁移；回滚=重新部署（数据在 Neon 持久，不随部署丢失）。
+- 迁移与回滚：greenfield 无数据迁移；回滚=重新部署（数据在 Neon 持久，不随部署丢失）；**已增量迁移**：`db/migrations/001-add-api-key.sql`（存量 DB 需单独执行）。
 - 契约 SSOT 说明：项目暂无 `project/contracts/` 与 `project/components/` 目录（见 §4 CONTEXT GAP）；本期契约以本 RFC §3.5 + Demo 类型（`demo/.../mockData.ts`）为基线，implementation 阶段落 DDL/字段。
 
 ## 4. 与现有系统的对齐（基于 `requirements/solution.md#impact-analysis`）

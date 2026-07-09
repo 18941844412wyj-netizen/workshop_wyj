@@ -657,37 +657,48 @@ Expected PASS: 数据正确写入，页面跳转至 `/targets`
 
 ### Task T5: 监控目标管理（Targets API + 前端页面）
 
-- [x] **状态**：已完成
+- [x] **状态**：已完成（含 stats 端点 + auto 采集模式 + StatsModal 前端）
 
 **验证结果摘要（2026-07-08）：**
 - `POST /api/targets` 新增 Midjourney → PASS（201 + 正确字段）
 - `GET /api/targets` → PASS（返回列表含新记录）
+- `GET /api/targets/:id?stats=true` → PASS（返回 total/valuable/noise/noiseTypes）
 - `npm run build` → PASS
+
+**实际变更（与原计划差异）：**
+1. **新增 stats 端点**：`GET /api/targets/:id?stats=true`，返回该目标情报统计：`total`（总数）、`valuable`（有价值）、`noise`（无价值）、`noiseTypes`（噪音类型分布数组）；SQL 用 4 次并发查询取统计数。
+2. **新增 `auto` 采集模式**：`collect_mode` 枚举增加 `auto`（每1分钟自动采集），前端显示为"自动采集（每1分钟）"；URL 格式校验同步增加 `test://` 协议头支持。
+3. **前端 TargetsPage 增强**：
+   - 新增 `StatsModal` 弹窗组件：展示监控统计三宫格（总数/有价值/无价值）+ 有价值比率进度条 + 噪音类型分布（含彩色标签与进度条）
+   - 噪音类型样式映射：营销数字诱饵（橙）/ 日期变更（紫）/ 排版样式调整（蓝）/ A-B摇摆（粉）/ 其他（灰）
+   - 竞品名称可点击触发 StatsModal
 
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `74c1a79`
+  commit: `74c1a79`（基础）→ 后续提交补充 stats 与 auto 模式
   pr: `<TBD>`
   changed_files:
     - `signal-desk/api/targets/index.ts`
-    - `signal-desk/api/targets/[id].ts`
-    - `signal-desk/src/pages/TargetsPage.tsx`
+    - `signal-desk/api/targets/[id].ts`（新增 GET stats + auto 模式校验）
+    - `signal-desk/src/pages/TargetsPage.tsx`（新增 StatsModal + auto 显示）
     - `signal-desk/src/components/Layout.tsx`
 
 **代码仓范围：**
 - 根项目：`signal-desk/api/targets/`、`signal-desk/src/pages/`
 
-**文件（创建）：**
+**文件（创建/修改）：**
 - `signal-desk/api/targets/index.ts`（GET/POST）
-- `signal-desk/api/targets/[id].ts`（PUT/DELETE）
-- `signal-desk/src/pages/TargetsPage.tsx`（从 Demo 迁移）
+- `signal-desk/api/targets/[id].ts`（PUT/DELETE + **GET stats**）
+- `signal-desk/src/pages/TargetsPage.tsx`（从 Demo 迁移 + **StatsModal** + **auto 模式**）
 
 **验收点：**
 - `GET /api/targets` 返回当前用户的监控目标列表
-- `POST /api/targets` 新增目标（名称/URL/赛道/采集方式），URL 格式校验（需以 `https://` 开头）
+- `POST /api/targets` 新增目标（名称/URL/赛道/采集方式），URL 支持 `https://` 和 `test://`
 - `PUT /api/targets/:id`、`DELETE /api/targets/:id` 正常工作
-- 前端 Targets 页可新增/编辑/删除，操作后列表即时刷新（AC-002）
+- `GET /api/targets/:id?stats=true` 返回情报统计数据，无情报时四个字段为 0/空数组
+- 前端 Targets 页可新增/编辑/删除，支持三种采集方式（手动/自动/固定时间）（AC-002）
+- 点击竞品名或"详情"按钮，弹出 StatsModal 展示情报统计
 
 **步骤 1：实现 targets/index.ts**
 
@@ -820,7 +831,7 @@ Expected PASS: noise → 0 个有意义候选；pricing → ≥1 个候选
 
 ### Task T7: AI 打标+分析引擎（AIAnalyzer + /api/analyze）
 
-- [x] **状态**：已完成（LLM 已配置智谱 glm-4-flash；strict schema 不可用时自动降级 JSON mode）
+- [x] **状态**：已完成（两阶段分析架构；AIGC 赛道专家人设；strict schema 不可用时降级 JSON mode）
 
 **验证结果摘要（2026-07-08）：**
 - `test://index.html` → 基准快照 → PASS
@@ -829,13 +840,23 @@ Expected PASS: noise → 0 个有意义候选；pricing → ≥1 个候选
 - `npx tsx api/_lib/llm-test.ts` → PASS（智谱 LLM 真实调用，JSON mode 兜底）
 - `npm run build` → PASS
 
+**实际变更（与原计划差异）：**
+1. **两阶段分析架构**（替代原计划的单次全量 LLM 调用）：
+   - **阶段 1（关键词规则）**：`patternNoiseBase`（噪音判断）+ `patternSignalBase`（信号识别）→ 输出 `IntelBase`（含标签/优先级/摘要，不含行动建议）
+   - **阶段 2（LLM 行动建议）**：`generateActionAdvice` 用专门的 `ACTION_SYSTEM_PROMPT` 调用 LLM，生成差异化 `actionGeneral`/`actionPlan`，并改写 `whatChanged`/`whyItMatters` 深度；含 `hasDistinctActions` 质量检查（至少 2 个不同建议才采用）
+   - 若关键词无命中，直接全量 LLM 调用（`zodResponseFormat` → 降级 `json_object`）
+2. **AIGC 赛道专家人设（DOMAIN_PERSONA）**：系统 Prompt 明确竞品范围（Midjourney/Runway/可灵/即梦等），分析从赛道专业视角出发
+3. **深度写作规范（DEPTH_RULES）**：禁空话/量化优先（还原 A→B 的具体幅度）/允许犀利有立场/AIGC 赛道上下文
+4. **噪音类型规范化**：固定 4 种中文枚举（营销数字诱饵/日期变更/排版样式调整/A-B摇摆），替代原来的自由字符串
+5. **双模型调用降级链**：`parse(strict)` → `create(json_object)` → 规则兜底（`ruleBasedAnalyze`），三层保护不产出半成品
+
 **审计信息：**
 - repo: `root`
   branch: `001-competitor-intel-monitor`
-  commit: `cf02299`
+  commit: `cf02299`（初版）→ 后续提交重构两阶段架构
   pr: `<TBD>`
   changed_files:
-    - `signal-desk/api/_lib/ai-analyzer.ts`
+    - `signal-desk/api/_lib/ai-analyzer.ts`（两阶段架构、AIGC 人设、深度规范）
     - `signal-desk/api/analyze.ts`
     - `signal-desk/api/_lib/collector.ts`（test:// 测试包支持）
     - `signal-desk/package.json`
@@ -844,15 +865,16 @@ Expected PASS: noise → 0 个有意义候选；pricing → ≥1 个候选
 - 根项目：`signal-desk/api/_lib/`、`signal-desk/api/`
 
 **文件（创建）：**
-- `signal-desk/api/_lib/ai-analyzer.ts`（Structured Outputs + Zod schema + OpenAI 调用）
+- `signal-desk/api/_lib/ai-analyzer.ts`（两阶段分析 + Zod schema + OpenAI 调用）
 - `signal-desk/api/analyze.ts`（POST /api/analyze，手动即时触发）
 
 **验收点：**
-- `analyzeChange(candidate, originalText, userProfile)` 能调用 LLM，返回 Zod 校验后的结构化情报字段
-- `isNoise=true` 的候选不写入 `intels` 表（规则-2）
+- `analyzeChange(candidate)` 按两阶段架构运行：关键词命中时走规则+LLM 行动建议，未命中时走全量 LLM
+- `isNoise=true` 的候选不写入 `intels` 表（规则-2）；噪音类型为 4 种固定枚举之一
 - `/api/analyze` POST `{ targetId }` 能触发「采集→检测→AI 分析→写 DB」全链路，返回 `{ ok, intelIds: string[] }`
-- LLM 调用失败时，情报 `analysis_status='failed'` 写 DB，不产出半成品（异常-2）
+- LLM 调用失败时降级规则兜底，`analysis_status='failed'` 写 DB，不产出半成品（异常-2）
 - 对 `Z-Pricing-1.html` 变体，输出 `labels` 包含 `'定价'`，`isNoise=false`（R-007 初步验证）
+- 行动建议有差异化（销售/产品/营销 + 四角色各不同），通过 `hasDistinctActions` 检查
 
 **步骤 1：定义 Zod Schema（AI 输出契约）**
 
@@ -945,12 +967,17 @@ Expected:
 
 ### Task T8: 情报 Insights API（个性化排序 + 状态 + 核心池）
 
-- [x] **状态**：已完成
+- [x] **状态**：已完成（chat + feedback 合并为 `[action].ts`）
 
 **验证结果摘要（2026-07-08）：**
 - `GET /api/insights?view=all` → PASS（按 matchScore 排序，含定价情报）
 - 情报字段完整（五要素 + sourceHtml + feedback 空数组）
 - `npm run build` → PASS
+
+**实际变更（与原计划差异）：**
+- **函数合并**：`insights/[id]/chat.ts` 与 `insights/[id]/feedback.ts` 两个独立文件已**合并为 `insights/[id]/[action].ts`**（节省 Vercel Hobby 平台的 12 个 Serverless Function 配额）；通过 query param `action=chat|feedback` 路由到对应处理函数（`handleChat`/`handleFeedback`）
+- 原先规划的 `insights/[id]/feedback.ts` 已在 T8 期间删除（D 状态），功能保留在 `[action].ts` 中
+- 原先规划的 `insights/[id]/chat.ts` 已在 T12 期间删除（D 状态），功能保留在 `[action].ts` 中
 
 **审计信息：**
 - repo: `root`
@@ -960,7 +987,7 @@ Expected:
   changed_files:
     - `signal-desk/api/insights/index.ts`
     - `signal-desk/api/insights/[id].ts`
-    - `signal-desk/api/insights/[id]/feedback.ts`
+    - `signal-desk/api/insights/[id]/[action].ts`（合并 chat + feedback，替代原 chat.ts 与 feedback.ts）
     - `signal-desk/api/_lib/insights-mapper.ts`
 
 **代码仓范围：**
@@ -968,8 +995,8 @@ Expected:
 
 **文件（创建）：**
 - `signal-desk/api/insights/index.ts`（GET /api/insights）
-- `signal-desk/api/insights/[id]/index.ts`（GET/PATCH /api/insights/:id）
-- `signal-desk/api/insights/[id]/feedback.ts`（POST /api/insights/:id/feedback）
+- `signal-desk/api/insights/[id].ts`（GET/PATCH /api/insights/:id）
+- `signal-desk/api/insights/[id]/[action].ts`（POST /api/insights/:id/chat + POST /api/insights/:id/feedback，合并文件）
 
 **验收点：**
 - `GET /api/insights?view=all|morning|pool&track=&label=&priority=&archiveFilter=hide|all|only` 返回按画像个性化排序的情报列表（规则-9/规则-11）
@@ -1165,15 +1192,26 @@ Expected PASS: AC-001/003/004/005/006/009/014 通过
 
 ---
 
-### Task T13: 设置页（角色与权重 Tab + 邮件通知 Tab）
+### Task T13: 设置页（角色与权重 Tab + 邮件通知 Tab + API Tab）
 
-- [x] **状态**：已完成
+- [x] **状态**：已完成（三 Tab：role / email / **api**）
 
 **验证结果摘要（2026-07-08）：**
 - `SettingsPage.tsx` 接入 `GET/PUT /api/profile`
 - 角色与权重 Tab：内置角色 + 自定义角色 + WeightModal
 - 邮件通知 Tab：多邮箱/推送时间/内容开关
+- **API Tab（新增）**：生成/撤销/复制 API Key
 - `npm run build` → PASS
+
+**实际变更（与原计划差异）：**
+- **新增第三个 Tab「API」**（Tab 类型扩展为 `'role' | 'email' | 'api'`）：
+  - 展示当前 API Key（脱敏显示/明文切换）
+  - 「生成 API Key」按钮 → 调用 `POST /api/profile?action=generate-api-key`
+  - 「复制」按钮 → `navigator.clipboard.writeText(apiKey)` + 2 秒反馈
+  - 「撤销 API Key」按钮 → confirm 对话框 → 调用 `POST /api/profile?action=revoke-api-key`
+- API Key 格式：`sk_` 前缀 + 32 字节随机字符串，存 `users.api_key` 字段
+- `GET /api/profile` 响应新增 `apiKey` 字段，供设置页初始化展示
+- `src/lib/constants.ts` 新增 `generateApiKey()`、`revokeApiKey()` 函数
 
 **审计信息：**
 - repo: `root`
@@ -1181,9 +1219,9 @@ Expected PASS: AC-001/003/004/005/006/009/014 通过
   commit: `fe780ac`
   pr: `<TBD>`
   changed_files:
-    - `signal-desk/src/pages/SettingsPage.tsx`
+    - `signal-desk/src/pages/SettingsPage.tsx`（新增 API Tab）
     - `signal-desk/src/components/inbox-ui.tsx`（WeightModal）
-    - `signal-desk/src/lib/constants.ts`
+    - `signal-desk/src/lib/constants.ts`（新增 generateApiKey/revokeApiKey）
 
 ---
 
@@ -1231,6 +1269,55 @@ Expected PASS: AC-001/003/004/005/006/009/014 通过
     - `signal-desk/api/chat-sessions/[[...params]].ts`（合并会话 API）
     - `signal-desk/api/tsconfig.json`
     - `signal-desk/package.json`（@types/node）
+
+---
+
+### Task T16: API Key 功能（数据库字段 + Profile API + 设置页 API Tab）
+
+- [x] **状态**：已完成（随 T13 设置页一同实现；事后补充记录）
+
+> **说明**：本 Task 为事后补充，记录在 T13 设计阶段未预料但已落地的 API Key 功能，便于追溯与后续复用。
+
+**功能概述：**
+API Key 功能允许用户在设置页生成/撤销/复制个人 API Key，用于外部集成（如 CLI 工具、自动化脚本直接调用 Signal Desk API）。
+
+**验证结果摘要（2026-07-08 后）：**
+- `POST /api/profile?action=generate-api-key` → 返回 `{ apiKey: 'sk_xxx' }` PASS
+- `POST /api/profile?action=revoke-api-key` → 返回 `{ ok: true }` PASS
+- `GET /api/profile` 响应含 `apiKey` 字段 PASS
+- 设置页 API Tab 展示/生成/撤销/复制 API Key PASS
+- `npm run build` → PASS
+
+**审计信息：**
+- repo: `root`
+  branch: `001-competitor-intel-monitor`
+  commit: `<TBD>`（与 T13 同批）
+  pr: `<TBD>`
+  changed_files:
+    - `signal-desk/db/schema.sql`（`users` 表新增 `api_key TEXT UNIQUE` 列 + 索引）
+    - `signal-desk/db/migrations/001-add-api-key.sql`（存量 DB 增量迁移脚本）
+    - `signal-desk/api/profile.ts`（generate-api-key / revoke-api-key 操作 + GET 返回 apiKey）
+    - `signal-desk/src/pages/SettingsPage.tsx`（API Tab）
+    - `signal-desk/src/lib/constants.ts`（generateApiKey / revokeApiKey 函数）
+
+**代码仓范围：**
+- 根项目：`signal-desk/db/`、`signal-desk/api/`、`signal-desk/src/`
+
+**数据库变更：**
+- `users` 表增加字段 `api_key TEXT UNIQUE`（可为 NULL）
+- `CREATE UNIQUE INDEX IF NOT EXISTS idx_users_api_key ON users(api_key) WHERE api_key IS NOT NULL`
+- 新建：`db/migrations/001-add-api-key.sql`（存量数据库需手动执行；新建数据库直接用 schema.sql 即可）
+
+**API 变更：**
+- `GET /api/profile` 响应新增 `apiKey: string | null` 字段
+- `POST /api/profile?action=generate-api-key`：生成 `sk_` 前缀 + 32 字节随机 API Key，存 `users.api_key`，返回 `{ apiKey }`
+- `POST /api/profile?action=revoke-api-key`：置 `users.api_key = NULL`，返回 `{ ok: true }`
+
+**验收点：**
+- 用户可在设置页 API Tab 生成 API Key（每次生成覆盖旧 Key）
+- 撤销后 `users.api_key = NULL`，设置页显示"暂无 API Key"
+- API Key 格式为 `sk_` + 32 位小写字母数字（排除歧义字符）
+- 数据库唯一索引保证 API Key 全局唯一
 
 ---
 

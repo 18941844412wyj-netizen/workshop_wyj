@@ -34,6 +34,30 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
   const id = req.query.id as string | undefined
   if (!id) return res.status(400).json({ error: '缺少目标 ID' })
 
+  // GET /api/targets/:id?stats=true — 返回该目标的情报统计
+  if (req.method === 'GET') {
+    const targetRows = await sql`
+      SELECT id, name FROM targets WHERE id = ${id} AND user_id = ${req.userId} LIMIT 1
+    `
+    if (targetRows.length === 0) return res.status(404).json({ error: '目标不存在' })
+
+    const [totalRow, valuableRow, noiseRow, noiseTypesRow] = await Promise.all([
+      sql`SELECT COUNT(*)::int AS count FROM intels WHERE target_id = ${id} AND user_id = ${req.userId}`,
+      sql`SELECT COUNT(*)::int AS count FROM intels WHERE target_id = ${id} AND user_id = ${req.userId} AND is_noise = false AND analysis_status = 'success'`,
+      sql`SELECT COUNT(*)::int AS count FROM intels WHERE target_id = ${id} AND user_id = ${req.userId} AND is_noise = true`,
+      sql`SELECT noise_type, COUNT(*)::int AS count FROM intels WHERE target_id = ${id} AND user_id = ${req.userId} AND is_noise = true AND noise_type IS NOT NULL GROUP BY noise_type ORDER BY count DESC`,
+    ])
+
+    return res.status(200).json({
+      targetId: id,
+      targetName: targetRows[0].name,
+      total: (totalRow[0]?.count as number) ?? 0,
+      valuable: (valuableRow[0]?.count as number) ?? 0,
+      noise: (noiseRow[0]?.count as number) ?? 0,
+      noiseTypes: noiseTypesRow.map(r => ({ type: r.noise_type as string, count: r.count as number })),
+    })
+  }
+
   if (req.method === 'PUT') {
     const body = readJsonBody<{
       name?: string

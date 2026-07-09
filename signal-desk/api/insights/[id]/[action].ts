@@ -2,12 +2,10 @@ import type { VercelResponse } from '@vercel/node'
 import { withAuth, readJsonBody, type AuthenticatedRequest } from '../../_lib/auth.js'
 import { sql } from '../../_lib/db.js'
 import { generateChatReply, type IntelContext } from '../../_lib/chat-reply.js'
+import type { FeedbackModule, FeedbackTag } from '../../_lib/types.js'
 
-async function handler(req: AuthenticatedRequest, res: VercelResponse) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
-
+// POST /api/insights/:id/chat
+async function handleChat(req: AuthenticatedRequest, res: VercelResponse) {
   try {
     const insightId = req.query.id as string | undefined
     if (!insightId) return res.status(400).json({ error: '缺少情报 ID' })
@@ -79,22 +77,14 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
       content: r.content as string,
     }))
 
-    const aiContent = await generateChatReply({
-      message,
-      referenceLabel,
-      intels,
-      history,
-    })
+    const aiContent = await generateChatReply({ message, referenceLabel, intels, history })
 
     const aiInserted = await sql`
       INSERT INTO conv_messages (session_id, role, content)
       VALUES (${sessionId}, 'ai', ${aiContent})
       RETURNING id, created_at
     `
-
-    await sql`
-      UPDATE chat_sessions SET updated_at = NOW() WHERE id = ${sessionId}
-    `
+    await sql`UPDATE chat_sessions SET updated_at = NOW() WHERE id = ${sessionId}`
 
     return res.status(200).json({
       sessionId,
@@ -109,6 +99,55 @@ async function handler(req: AuthenticatedRequest, res: VercelResponse) {
     console.error('[insights/chat] failed:', err)
     return res.status(500).json({ error: '深度对话失败，请稍后重试' })
   }
+}
+
+// POST /api/insights/:id/feedback
+async function handleFeedback(req: AuthenticatedRequest, res: VercelResponse) {
+  const id = req.query.id as string | undefined
+  if (!id) return res.status(400).json({ error: '缺少情报 ID' })
+
+  const body = readJsonBody<{
+    tags?: FeedbackTag[]
+    modules?: FeedbackModule[]
+    note?: string
+  }>(req)
+
+  const tags = body.tags ?? []
+  const modules = body.modules ?? []
+  const note = body.note ?? ''
+
+  const intelRows = await sql`
+    SELECT id FROM intels WHERE id = ${id} AND user_id = ${req.userId} LIMIT 1
+  `
+  if (intelRows.length === 0) return res.status(404).json({ error: '情报不存在' })
+
+  await sql`
+    INSERT INTO feedback (intel_id, user_id, tags, modules, note)
+    VALUES (${id}, ${req.userId}, ${JSON.stringify(tags)}, ${JSON.stringify(modules)}, ${note})
+    ON CONFLICT (intel_id, user_id) DO UPDATE SET
+      tags = EXCLUDED.tags,
+      modules = EXCLUDED.modules,
+      note = EXCLUDED.note,
+      updated_at = NOW()
+  `
+
+  if (tags.includes('有用')) {
+    await sql`
+      UPDATE intels SET in_core_pool = true, updated_at = NOW()
+      WHERE id = ${id} AND user_id = ${req.userId}
+    `
+  }
+
+  return res.status(200).json({ ok: true })
+}
+
+async function handler(req: AuthenticatedRequest, res: VercelResponse) {
+  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
+
+  const action = req.query.action as string | undefined
+  if (action === 'chat') return handleChat(req, res)
+  if (action === 'feedback') return handleFeedback(req, res)
+  return res.status(404).json({ error: '未知操作' })
 }
 
 export default withAuth(handler)

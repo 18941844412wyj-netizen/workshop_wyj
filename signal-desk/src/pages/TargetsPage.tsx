@@ -3,6 +3,134 @@ import type { CollectMode, Target, Track } from '../lib/constants'
 import { Layout, Toast, ConfirmModal } from '../components/Layout'
 import { fetchProfileCached } from '../lib/profile-cache'
 
+interface TargetStats {
+  targetId: string
+  targetName: string
+  total: number
+  valuable: number
+  noise: number
+  noiseTypes: { type: string; count: number }[]
+}
+
+function StatsModal({ target, onClose }: { target: Target; onClose: () => void }) {
+  const [stats, setStats] = useState<TargetStats | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetch(`/api/targets/${target.id}?stats=true`, { credentials: 'include' })
+      .then(r => r.ok ? r.json() : Promise.reject(r))
+      .then(data => { setStats(data); setLoading(false) })
+      .catch(() => { setError('加载失败，请重试'); setLoading(false) })
+  }, [target.id])
+
+  const valuableRate = stats && stats.total > 0
+    ? Math.round((stats.valuable / stats.total) * 100)
+    : 0
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal" style={{ minWidth: 420 }} onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <h3>监控详情 · {target.name}</h3>
+          <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+        <div className="modal-body">
+          {loading && <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px 0' }}>加载中…</div>}
+          {error && <div className="banner banner-error">{error}</div>}
+          {stats && (
+            <>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 20 }}>
+                <div style={statCardStyle('#f0f4ff')}>
+                  <div style={statNumStyle}>{stats.total}</div>
+                  <div style={statLabelStyle}>已监控总数</div>
+                </div>
+                <div style={statCardStyle('#f0fff4')}>
+                  <div style={statNumStyle}>{stats.valuable}</div>
+                  <div style={statLabelStyle}>有价值信息</div>
+                </div>
+                <div style={statCardStyle('#fff5f5')}>
+                  <div style={statNumStyle}>{stats.noise}</div>
+                  <div style={statLabelStyle}>无价值信息</div>
+                </div>
+              </div>
+
+              {stats.total > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12, color: 'var(--text-muted)', marginBottom: 6 }}>
+                    <span>有价值比率</span>
+                    <span>{valuableRate}%</span>
+                  </div>
+                  <div style={{ height: 6, borderRadius: 3, background: 'var(--border)', overflow: 'hidden' }}>
+                    <div style={{ height: '100%', width: `${valuableRate}%`, background: '#2f9e44', borderRadius: 3, transition: 'width 0.4s' }} />
+                  </div>
+                </div>
+              )}
+
+              {stats.noiseTypes.length > 0 && (
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)', marginBottom: 10, letterSpacing: '0.03em' }}>
+                    无价值类型分布
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {stats.noiseTypes.map(n => {
+                      const maxCount = stats.noiseTypes[0]?.count ?? 1
+                      const pct = Math.round((n.count / maxCount) * 100)
+                      const { color, bg } = NOISE_TYPE_STYLE[n.type] ?? NOISE_TYPE_STYLE['其他']
+                      return (
+                        <div key={n.type}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                            <span style={{
+                              display: 'inline-block', fontSize: 12, fontWeight: 600,
+                              padding: '1px 8px', borderRadius: 20,
+                              background: bg, color,
+                            }}>
+                              {n.type || '其他'}
+                            </span>
+                            <span style={{ fontVariantNumeric: 'tabular-nums', fontSize: 13, color: 'var(--text-muted)', fontWeight: 500 }}>{n.count}</span>
+                          </div>
+                          <div style={{ height: 4, borderRadius: 2, background: 'var(--border)', overflow: 'hidden' }}>
+                            <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 2, transition: 'width 0.4s', opacity: 0.6 }} />
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {stats.noise > 0 && stats.noiseTypes.length === 0 && (
+                <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>（无价值信息未分类型）</div>
+              )}
+            </>
+          )}
+        </div>
+        <div className="modal-footer">
+          <button className="btn btn-secondary" onClick={onClose}>关闭</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+const statCardStyle = (bg: string): React.CSSProperties => ({
+  background: bg, borderRadius: 10, padding: '14px 12px', textAlign: 'center',
+})
+const statNumStyle: React.CSSProperties = {
+  fontSize: 28, fontWeight: 700, lineHeight: 1.1, marginBottom: 4,
+}
+const statLabelStyle: React.CSSProperties = {
+  fontSize: 11, color: 'var(--text-muted)', fontWeight: 500,
+}
+
+const NOISE_TYPE_STYLE: Record<string, { color: string; bg: string }> = {
+  '营销数字诱饵': { color: '#d97706', bg: '#fef3c7' },
+  '日期变更':    { color: '#6366f1', bg: '#ede9fe' },
+  '排版样式调整': { color: '#0891b2', bg: '#e0f2fe' },
+  'A-B摇摆':    { color: '#be185d', bg: '#fce7f3' },
+  '其他':        { color: '#64748b', bg: '#f1f5f9' },
+}
+
 let _targetsCache: Target[] | undefined
 
 interface ToastInfo { msg: string; type: 'success' | 'error' }
@@ -143,6 +271,7 @@ export default function TargetsPage() {
   const [toast, setToast] = useState<ToastInfo | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [loading, setLoading] = useState(_targetsCache === undefined)
+  const [statsTarget, setStatsTarget] = useState<Target | null>(null)
 
   const refresh = async () => {
     const res = await fetch('/api/targets', { credentials: 'include' })
@@ -230,13 +359,23 @@ export default function TargetsPage() {
               <tbody>
                 {targets.map(t => (
                   <tr key={t.id}>
-                    <td className="td-name">{t.name}</td>
+                    <td className="td-name">
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        style={{ fontWeight: 600, padding: '0 4px', textDecoration: 'underline', textDecorationStyle: 'dotted', color: 'var(--text-primary)' }}
+                        onClick={() => setStatsTarget(t)}
+                        title="查看监控详情"
+                      >
+                        {t.name}
+                      </button>
+                    </td>
                     <td className="td-url"><a href={t.url} target="_blank" rel="noreferrer">{t.url}</a></td>
                     <td><span className="tag tag-track">{t.track}</span></td>
                     <td className="td-muted">{collectLabel(t)}</td>
                     <td><span className="tag">{t.monitorStatus}</span></td>
                     <td>
                       <div className="td-actions">
+                        <button className="btn btn-ghost btn-sm" onClick={() => setStatsTarget(t)}>详情</button>
                         <button className="btn btn-secondary btn-sm" onClick={() => handleAnalyze(t)} disabled={analyzing[t.id]}>
                           {analyzing[t.id] ? '分析中…' : '立即检测'}
                         </button>
@@ -254,6 +393,7 @@ export default function TargetsPage() {
 
       {showAdd && <TargetFormModal onClose={() => setShowAdd(false)} onSaved={refresh} />}
       {editTarget && <TargetFormModal target={editTarget} onClose={() => setEditTarget(null)} onSaved={refresh} />}
+      {statsTarget && <StatsModal target={statsTarget} onClose={() => setStatsTarget(null)} />}
       {toast && <Toast message={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
       {deleteConfirm && (
         <ConfirmModal title="删除竞品" body="删除后该竞品及其历史情报将移除，是否确认？"
