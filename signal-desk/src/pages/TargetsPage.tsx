@@ -102,6 +102,10 @@ function TargetFormModal({
                 <input type="radio" name="collectMode" checked={collectMode === 'manual'} onChange={() => setCollectMode('manual')} />
                 <span className="role-item-label">手动即时触发</span>
               </label>
+              <label className={'role-item' + (collectMode === 'auto' ? ' selected' : '')}>
+                <input type="radio" name="collectMode" checked={collectMode === 'auto'} onChange={() => setCollectMode('auto')} />
+                <span className="role-item-label">自动采集（每5分钟）</span>
+              </label>
               <label className={'role-item' + (collectMode === 'scheduled' ? ' selected' : '')}>
                 <input type="radio" name="collectMode" checked={collectMode === 'scheduled'} onChange={() => setCollectMode('scheduled')} />
                 <span className="role-item-label">固定时间采集</span>
@@ -177,8 +181,11 @@ export default function TargetsPage() {
     })
   }, [])
 
-  const collectLabel = (t: Target) =>
-    t.collectMode === 'manual' ? '手动即时触发' : `固定时间（${t.schedule ?? '未设置'}）`
+  const collectLabel = (t: Target) => {
+    if (t.collectMode === 'manual') return '手动即时触发'
+    if (t.collectMode === 'auto') return '自动采集（每5分钟）'
+    return `固定时间（${t.schedule ?? '未设置'}）`
+  }
 
   const handleDelete = async (id: string) => {
     const res = await fetch(`/api/targets/${id}`, { method: 'DELETE', credentials: 'include' })

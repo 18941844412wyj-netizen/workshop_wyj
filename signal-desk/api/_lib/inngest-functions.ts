@@ -17,7 +17,7 @@ export const detectPageChanges = inngest.createFunction(
   async ({ step }) => {
     const targets = await step.run('fetch-scheduled-targets', async () => {
       return sql<{ id: string; user_id: string }[]>`
-        SELECT id, user_id FROM targets WHERE collect_mode = 'scheduled'
+        SELECT id, user_id FROM targets WHERE collect_mode IN ('scheduled', 'auto')
       `
     })
 
