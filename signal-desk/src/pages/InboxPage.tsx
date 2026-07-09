@@ -6,7 +6,8 @@ import InboxList from '../components/InboxList'
 import InspectorPanel from '../components/InspectorPanel'
 import DeepChatPanel from '../components/DeepChatPanel'
 import type { Intel, FeedbackTag, FeedbackModule } from '../lib/types'
-import { fetchProfile } from '../lib/constants'
+import { fetchProfileCached } from '../lib/profile-cache'
+import { getCachedIntels, setCachedIntels } from '../lib/intels-cache'
 
 type ListView = 'morning' | 'pool' | 'all'
 type ArchiveFilter = 'hide' | 'all' | 'only'
@@ -15,8 +16,8 @@ type InspectorTab = 'detail' | 'chat'
 export default function InboxPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [intels, setIntels] = useState<Intel[]>([])
-  const [loading, setLoading] = useState(true)
+  const [intels, setIntels] = useState<Intel[]>(() => getCachedIntels() ?? [])
+  const [loading, setLoading] = useState(() => getCachedIntels() === undefined)
   const [userEmail, setUserEmail] = useState('')
   const [currentRole, setCurrentRole] = useState('产品经理')
   const [listView, setListView] = useState<ListView>('morning')
@@ -50,19 +51,27 @@ export default function InboxPage() {
 
   const refresh = useCallback(async () => {
     const res = await fetch(`/api/insights?${buildQuery()}`, { credentials: 'include' })
-    if (res.ok) setIntels(await res.json())
+    if (res.ok) {
+      const list = await res.json()
+      setCachedIntels(list)
+      setIntels(list)
+    }
   }, [buildQuery])
 
   useEffect(() => {
-    fetchProfile().then(p => {
+    fetchProfileCached().then(p => {
       if (p?.email) setUserEmail(p.email)
       if (p?.role) setCurrentRole(p.role)
     })
   }, [])
 
   useEffect(() => {
-    setLoading(true)
-    refresh().finally(() => setLoading(false))
+    if (getCachedIntels() !== undefined) {
+      refresh()
+    } else {
+      setLoading(true)
+      refresh().finally(() => setLoading(false))
+    }
   }, [refresh])
 
   useEffect(() => {
