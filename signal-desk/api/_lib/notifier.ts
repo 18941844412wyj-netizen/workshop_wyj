@@ -1,10 +1,10 @@
 import { sql } from './db.js'
 import { defaultEmailSettings, type EmailSettings } from './types.js'
-import { isSmtpConfigured, sendMail } from './mailer.js'
+import { isMailConfigured, sendMail } from './mailer.js'
 
-/** 邮件是否可用（SMTP 已配置） */
+/** 邮件是否可用（Resend 或 SMTP 已配置） */
 export function isEmailConfigured(): boolean {
-  return isSmtpConfigured()
+  return isMailConfigured()
 }
 
 /** pushTime -> 北京时间小时（用于每日摘要的定时匹配） */
@@ -139,9 +139,9 @@ export async function sendNotification(intelId: string, userId: string): Promise
   const sendNow = settings.pushTime === 'immediate' || intel.priority === '紧急'
   if (!sendNow) return { ok: true, skipped: true, reason: '非紧急，转入每日摘要' }
 
-  if (!isSmtpConfigured()) {
-    console.warn('[notifier] SMTP 未配置，跳过即时邮件')
-    return { ok: true, skipped: true, reason: 'SMTP 未配置' }
+  if (!isMailConfigured()) {
+    console.warn('[notifier] 邮件未配置，跳过即时邮件')
+    return { ok: true, skipped: true, reason: '邮件未配置' }
   }
 
   const appUrl = getAppUrl()
@@ -193,9 +193,9 @@ export async function sendDailyDigest(userId: string): Promise<DigestResult> {
   `
   if (rows.length === 0) return { ok: true, skipped: true, count: 0, reason: '当日无新增情报' }
 
-  if (!isSmtpConfigured()) {
-    console.warn('[notifier] SMTP 未配置，跳过每日摘要')
-    return { ok: true, skipped: true, count: 0, reason: 'SMTP 未配置' }
+  if (!isMailConfigured()) {
+    console.warn('[notifier] 邮件未配置，跳过每日摘要')
+    return { ok: true, skipped: true, count: 0, reason: '邮件未配置' }
   }
 
   const appUrl = getAppUrl()
@@ -218,7 +218,7 @@ export async function sendDailyDigest(userId: string): Promise<DigestResult> {
  * 若当日暂无情报则发一封空摘要提示。收件人取设置里的邮箱，无则取账号邮箱。
  */
 export async function sendTestEmail(userId: string): Promise<{ ok: boolean; error?: string; to?: string[] }> {
-  if (!isSmtpConfigured()) return { ok: false, error: 'SMTP 未配置，请先填入 SMTP_HOST/SMTP_USER/SMTP_PASS' }
+  if (!isMailConfigured()) return { ok: false, error: '邮件未配置，请先设置 RESEND_API_KEY 或 SMTP 参数' }
 
   const settings = await loadSettings(userId)
   let recipients = getRecipients(settings)
