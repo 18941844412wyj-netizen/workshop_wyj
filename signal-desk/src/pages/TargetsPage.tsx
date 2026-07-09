@@ -107,7 +107,7 @@ function TargetFormModal({
               </label>
               <label className={'role-item' + (collectMode === 'auto' ? ' selected' : '')}>
                 <input type="radio" name="collectMode" checked={collectMode === 'auto'} onChange={() => setCollectMode('auto')} />
-                <span className="role-item-label">自动采集（每5分钟）</span>
+                <span className="role-item-label">自动采集（每1分钟）</span>
               </label>
               <label className={'role-item' + (collectMode === 'scheduled' ? ' selected' : '')}>
                 <input type="radio" name="collectMode" checked={collectMode === 'scheduled'} onChange={() => setCollectMode('scheduled')} />
@@ -192,7 +192,7 @@ export default function TargetsPage() {
 
   const collectLabel = (t: Target) => {
     if (t.collectMode === 'manual') return '手动即时触发'
-    if (t.collectMode === 'auto') return '自动采集（每5分钟）'
+    if (t.collectMode === 'auto') return '自动采集（每1分钟）'
     return `固定时间（${t.schedule ?? '未设置'}）`
   }
 

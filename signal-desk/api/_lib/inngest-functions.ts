@@ -4,14 +4,14 @@ import { runAnalysis } from './run-analysis.js'
 import { sendDailyDigest, PUSH_TIME_HOURS } from './notifier.js'
 
 /**
- * 每 5 分钟扫描所有 scheduled 目标，检测页面变化并生成情报。
+ * 每 1 分钟扫描所有 scheduled/auto 目标，检测页面变化并生成情报。
  * Inngest v4 API：trigger 放在 options.triggers 数组里，handler 是第 2 个参数。
  */
 export const detectPageChanges = inngest.createFunction(
   {
     id: 'detect-page-changes',
-    name: '页面变化检测（每 5 分钟）',
-    triggers: [{ cron: '*/5 * * * *' }],
+    name: '页面变化检测（每 1 分钟）',
+    triggers: [{ cron: '* * * * *' }],
     concurrency: { limit: 1 },
   },
   async ({ step }) => {
